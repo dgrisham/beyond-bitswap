@@ -2,6 +2,7 @@
 
 BRANCH="$1" && shift
 [[ -z "$BRANCH" ]] && BRANCH=master
+git checkout $BRANCH || { echo "error checking out branch '$BRANCH'. exiting" >&2 ; exit 1 ; }
 # echo "Starting test on branch '$BRANCH'..."
 
 # RUNNER="local:docker"
