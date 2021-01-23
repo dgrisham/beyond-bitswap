@@ -22,9 +22,9 @@ LATENCY=10
 JITTER=10
 BANDWIDTH=150
 PARALLEL_GEN=100
-TESTCASE=ipfs-transfer
+TESTCASE=bitswap-transfer
 INPUT_DATA=files
-# DATA_DIR=../extra/testDataset
+DATA_DIR=../../testDataset
 TCP_ENABLED=false
 MAX_CONNECTION_RATE=100
 

@@ -10,7 +10,7 @@ echo "Starting test..."
 run_bitswap(){
     $TESTGROUND_BIN run single \
         --build-cfg skip_runtime_image=true \
-        --plan=testbed \
+        --plan=testbed/testbed \
         --testcase=$1 \
         --builder=$BUILDER \
         --runner=$RUNNER --instances=$2 \
