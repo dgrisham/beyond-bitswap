@@ -83,6 +83,9 @@ name = "bitswap-transfer"
 instances = { min = 2, max = 64, default = 2 }
 
   [testcases.params]
+  run_prefix = { type = "string", desc = "string prefix for output measurements", unit = "", default = "master" }
+  strategy_func = { type = "string", desc = "prq peer weighting function", default = "identity" }
+  round_size = { type = "int", desc = "prq round size", unit = "bytes", default = 1000000 }
   input_data = { type="string", desc="input data to be used in the test (files, random, custom)", default="random"}
   data_dir = { type="string", desc="directory with data is located", default="../extra/test-datasets"}
   exchange_interface = { type="string", desc="exchange interface to use in IPFS node", default="bitswap"}

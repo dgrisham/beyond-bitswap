@@ -27,6 +27,8 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	if err != nil {
 		return err
 	}
+	roundSize := runenv.IntParam("round_size")
+	strategyFunc := runenv.StringParam("strategy_func")
 
 	/// --- Set up
 	ctx, cancel := context.WithTimeout(context.Background(), testvars.Timeout)
@@ -57,7 +59,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			return err
 		}
 		// Create a new bitswap node from the blockstore
-		bsnode, err = utils.CreateBitswapNode(ctx, h, bstore)
+		bsnode, err = utils.CreateBitswapNode(ctx, h, bstore, strategyFunc, roundSize)
 		if err != nil {
 			return err
 		}
@@ -156,7 +158,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				}
 
 				// Create a new bitswap node from the blockstore
-				bsnode, err = utils.CreateBitswapNode(ctx, h, bstore)
+				bsnode, err = utils.CreateBitswapNode(ctx, h, bstore, strategyFunc, roundSize)
 				if err != nil {
 					return err
 				}
@@ -180,6 +182,32 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			if err != nil {
 				return err
 			}
+
+			// --- start time series metric gathering functions
+			quit := make(chan bool)
+			go func() { // record bitswap metrics in the background while fetching blocks
+
+				for {
+					select {
+
+					case <-quit: // loop until signal is received
+						return
+
+					default:
+
+						for _, peerInfo := range t.peerInfos {
+							if peerInfo.Addr.ID == h.ID() {
+								continue
+							}
+							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
+							runenv.R().RecordPoint(receiptID, float64(1))
+						}
+
+						time.Sleep(time.Duration(1000)) // 1 ms (0.001 s) between each step
+					}
+				}
+			}()
 
 			/// --- Start test
 
