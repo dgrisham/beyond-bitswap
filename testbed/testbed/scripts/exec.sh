@@ -30,8 +30,8 @@ run_bitswap() {
         -tp run_prefix=${15} \
         -tp strategy_func=${16} \
         -tp round_size=${17} \
-        --dep github.com/ipfs/go-bitswap=github.com/dgrisham/go-bitswap@$BRANCH \
-        --dep github.com/ipfs/go-peertaskqueue=github.com/dgrisham/go-peertaskqueue@$BRANCH
+        --dep github.com/ipfs/go-bitswap=github.com/dgrisham/go-bitswap@peer-weights \
+        --dep github.com/ipfs/go-peertaskqueue=github.com/dgrisham/go-peertaskqueue@peer-weights
         # | tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'
 
 }
