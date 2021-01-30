@@ -184,7 +184,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 
 			for _, peerInfo := range t.peerInfos {
-				runenv.RecordMessage("Looking for number of bytes to send for %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+				// runenv.RecordMessage("Looking for number of bytes to send for %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 
 				numBytesSent := getInitialSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
 				if numBytesSent != 0 {
@@ -205,6 +205,32 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			if err != nil {
 				return err
 			}
+
+			// --- start time series metric gathering functions
+			quit := make(chan bool)
+			go func() { // record bitswap metrics in the background while fetching blocks
+
+				for {
+					select {
+
+					case <-quit: // loop until signal is received
+						return
+
+					default:
+
+						for _, peerInfo := range t.peerInfos {
+							if peerInfo.Addr.ID == h.ID() {
+								continue
+							}
+							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
+							runenv.R().RecordPoint(receiptID, float64(1))
+						}
+
+						time.Sleep(time.Duration(1000)) // 1 ms (0.001 s) between each step
+					}
+				}
+			}()
 
 			/// --- Start test
 
