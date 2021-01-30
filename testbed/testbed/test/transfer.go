@@ -186,15 +186,14 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 
 			for _, peerInfo := range t.peerInfos {
-				runenv.RecordMessage("Looking for number of bytes to send for %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
-
+				// runenv.RecordMessage("Looking for number of bytes to send for %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 				numBytesSent := getInitialSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
 				if numBytesSent != 0 {
 					runenv.RecordMessage("Adding %d bytes to sent value in ledger for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.AddToLedgerSentBytes(peerInfo.Addr.ID, numBytesSent)
 				}
 
-				runenv.RecordMessage("Looking for number of bytes to recv from %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+				// runenv.RecordMessage("Looking for number of bytes to recv from %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 				numBytesRcvd := getInitialSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
 				if numBytesRcvd != 0 {
 					runenv.RecordMessage("Adding %d bytes to received value ledger for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
