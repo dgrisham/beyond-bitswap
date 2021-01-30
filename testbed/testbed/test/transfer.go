@@ -179,12 +179,6 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 			runenv.RecordMessage("Dialed %d other nodes", len(dialed))
 
-			for _, p := range dialed {
-				runenv.RecordMessage("Adding to ledger for peer", p.ID)
-				bsnode.Bitswap.AddToLedgerReceivedBytes(p.ID, 100000)
-				bsnode.Bitswap.AddToLedgerSentBytes(p.ID, 100000)
-			}
-
 			// Wait for all nodes to be connected
 			err = signalAndWaitForAll("connect-complete-" + runID)
 			if err != nil {
