@@ -188,10 +188,12 @@ func InitializeTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestV
 		return err
 	}
 
-	return &TestData{client, nwClient,
+	return &TestData{
+		client, nwClient,
 		nConfig, infos, dialFn,
 		latency, bandwidthMB, signalAndWaitForAll,
-		seq, grpseq, nodetp, tpindex, seedIndex}, nil
+		seq, grpseq, nodetp, tpindex, seedIndex,
+	}, nil
 }
 
 func (t *TestData) publishFile(ctx context.Context, fIndex int, cid *cid.Cid, runenv *runtime.RunEnv) error {
@@ -355,6 +357,7 @@ func (t *IPFSTestData) addPublishFile(ctx context.Context, fIndex int, f utils.T
 	}
 	return nil
 }
+
 func (t *IPFSTestData) cleanupRun(ctx context.Context, runenv *runtime.RunEnv) error {
 	// Disconnect peers
 	for _, c := range t.ipfsNode.Node.PeerHost.Network().Conns() {
@@ -472,7 +475,7 @@ func setupSeed(ctx context.Context, runenv *runtime.RunEnv, node *utils.Node, fi
 		return cid.Cid{}, err
 	}
 
-	//TODO: Explore this seed_fraction parameter.
+	// TODO: Explore this seed_fraction parameter.
 	if !runenv.IsParamSet("seed_fraction") {
 		return ipldNode.Cid(), nil
 	}
@@ -541,7 +544,6 @@ func getTCPAddrTopic(id int) *sync.Topic {
 
 func emitMetrics(runenv *runtime.RunEnv, bsnode *utils.Node, runNum int, seq int64, grpseq int64,
 	latency time.Duration, bandwidthMB int, fileSize int, nodetp utils.NodeType, tpindex int, timeToFetch time.Duration) error {
-
 	stats, err := bsnode.Bitswap.Stat()
 	if err != nil {
 		return fmt.Errorf("Error getting stats from Bitswap: %w", err)
@@ -552,7 +554,7 @@ func emitMetrics(runenv *runtime.RunEnv, bsnode *utils.Node, runNum int, seq int
 	leechCount := runenv.IntParam("leech_count")
 	passiveCount := runenv.IntParam("passive_count")
 
-	id := fmt.Sprintf("topology:(%d-%d-%d)/latencyMS:%d/bandwidthMB:%d/run:%d/seq:%d/groupName:%s/groupSeq:%d/fileSize:%d/nodeType:%s/nodeTypeIndex:%d",
+	id := fmt.Sprintf("branch:master/topology:(%d-%d-%d)/latencyMS:%d/bandwidthMB:%d/run:%d/seq:%d/groupName:%s/groupSeq:%d/fileSize:%d/nodeType:%s/nodeTypeIndex:%d",
 		instance-leechCount-passiveCount, leechCount, passiveCount,
 		latencyMS, bandwidthMB, runNum, seq, runenv.TestGroupID, grpseq, fileSize, nodetp, tpindex)
 
