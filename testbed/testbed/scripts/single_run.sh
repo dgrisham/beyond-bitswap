@@ -1,9 +1,9 @@
 #!/bin/bash
 
-BRANCH="$1" && shift
-[[ -z "$BRANCH" ]] && BRANCH=master
-git checkout $BRANCH || { echo "error checking out branch '$BRANCH'. exiting" >&2 ; exit 1 ; }
-# echo "Starting test on branch '$BRANCH'..."
+# BRANCH="$1" && shift
+# [[ -z "$BRANCH" ]] && BRANCH=master
+# git checkout $BRANCH || { echo "error checking out branch '$BRANCH'. exiting" >&2 ; exit 1 ; }
+# # echo "Starting test on branch '$BRANCH'..."
 
 # RUNNER="local:docker"
 # BUILDER="docker:go"
@@ -32,7 +32,6 @@ INPUT_DATA=random
 TCP_ENABLED=false
 MAX_CONNECTION_RATE=100
 DATA_DIR='../../test-datasets'
-RUN_PREFIX=$BRANCH
 STRATEGY_FUNC='identity'
 ROUND_SIZE=10000
 

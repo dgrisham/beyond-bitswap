@@ -30,6 +30,8 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	roundSize := runenv.IntParam("round_size")
 	strategyFunc := runenv.StringParam("strategy_func")
 
+	runenv.RecordMessage("Running on branch 'peer-weights'")
+
 	/// --- Set up
 	ctx, cancel := context.WithTimeout(context.Background(), testvars.Timeout)
 	defer cancel()
@@ -176,6 +178,12 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 			runenv.RecordMessage("Dialed %d other nodes", len(dialed))
+
+			for _, p := range dialed {
+				runenv.RecordMessage("Adding to ledger for peer", p.ID)
+				bsnode.Bitswap.AddToLedgerReceivedBytes(p.ID, 100000)
+				bsnode.Bitswap.AddToLedgerSentBytes(p.ID, 100000)
+			}
 
 			// Wait for all nodes to be connected
 			err = signalAndWaitForAll("connect-complete-" + runID)
