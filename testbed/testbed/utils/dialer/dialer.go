@@ -14,8 +14,9 @@ import (
 
 // PeerInfo provides all the neccessary information to dial a peer
 type PeerInfo struct {
-	Addr   peer.AddrInfo
-	Nodetp utils.NodeType
+	Addr    peer.AddrInfo
+	Nodetp  utils.NodeType
+	TpIndex int
 }
 
 // PeerInfosFromChan collects peer information from a channel of peer information

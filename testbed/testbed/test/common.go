@@ -128,7 +128,7 @@ func InitializeTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestV
 
 	peerInfos := sync.NewTopic("peerInfos", &dialer.PeerInfo{})
 	// Publish peer info for dialing
-	_, err = client.Publish(ctx, peerInfos, &dialer.PeerInfo{Addr: *nConfig.AddrInfo, Nodetp: nodetp})
+	_, err = client.Publish(ctx, peerInfos, &dialer.PeerInfo{Addr: *nConfig.AddrInfo, Nodetp: nodetp, TpIndex: tpindex})
 	if err != nil {
 		return nil, err
 	}
