@@ -28,6 +28,8 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		return err
 	}
 
+	runenv.RecordMessage("Running on branch 'master'")
+
 	/// --- Set up
 	ctx, cancel := context.WithTimeout(context.Background(), testvars.Timeout)
 	defer cancel()
