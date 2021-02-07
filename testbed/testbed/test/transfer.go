@@ -224,7 +224,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 								continue
 							}
 							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
-							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight)
 							runenv.R().RecordPoint(receiptID, float64(1))
 						}
 
