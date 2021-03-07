@@ -26,9 +26,7 @@ run_bitswap() {
         -tp data_dir=${11} \
         -tp enable_tcp=${12} \
         -tp max_connection_rate=${13} \
-        -tp passive_count=${14} \
-        --dep github.com/ipfs/go-bitswap=github.com/dgrisham/go-bitswap@master \
-        --dep github.com/ipfs/go-peertaskqueue=github.com/dgrisham/go-peertaskqueue@master
+        -tp passive_count=${14}
         # | tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'
 
 }
