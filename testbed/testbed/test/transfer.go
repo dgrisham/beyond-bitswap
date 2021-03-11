@@ -184,7 +184,6 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 
 			for _, peerInfo := range t.peerInfos {
-				// runenv.RecordMessage("Looking for number of bytes to send for %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 
 				numBytesSent := getInitialSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
 				if numBytesSent != 0 {
@@ -192,7 +191,6 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 					bsnode.Bitswap.AddToLedgerSentBytes(peerInfo.Addr.ID, numBytesSent)
 				}
 
-				// runenv.RecordMessage("Looking for number of bytes to recv from %s %d (peer %s)", peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 				numBytesRcvd := getInitialSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
 				if numBytesRcvd != 0 {
 					runenv.RecordMessage("Adding %d bytes to received value ledger for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
@@ -227,7 +225,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 							runenv.R().RecordPoint(receiptID, float64(1))
 						}
 
-						time.Sleep(time.Duration(1000)) // 1 ms (0.001 s) between each step
+						time.Sleep(1 * time.Millisecond) // 1 ms between each step
 					}
 				}
 			}()
@@ -238,10 +236,10 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			if t.nodetp == utils.Leech {
 				// Stagger the start of the first request from each leech
 				// Note: seq starts from 1 (not 0)
-				startDelay := time.Duration(t.seq-1) * testvars.RequestStagger
-				time.Sleep(startDelay)
+				// startDelay := time.Duration(t.seq-1) * testvars.RequestStagger
+				// time.Sleep(startDelay)
 
-				runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
+				// runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
 				start := time.Now()
 				err := bsnode.FetchGraph(ctx, rootCid)
 				timeToFetch = time.Since(start)
