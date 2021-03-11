@@ -6,12 +6,17 @@ var initialSends = map[utils.NodeType]map[int]map[utils.NodeType]map[int]int{
 	utils.Leech: map[int]map[utils.NodeType]map[int]int{
 		0: map[utils.NodeType]map[int]int{
 			utils.Seed: map[int]int{
-				0: 100000,
+				0: 1,
 			},
 		},
 		1: map[utils.NodeType]map[int]int{
 			utils.Seed: map[int]int{
-				0: 100,
+				0: 5000000000,
+			},
+		},
+		2: map[utils.NodeType]map[int]int{
+			utils.Seed: map[int]int{
+				0: 5000000000,
 			},
 		},
 	},
@@ -20,6 +25,7 @@ var initialSends = map[utils.NodeType]map[int]map[utils.NodeType]map[int]int{
 			utils.Leech: map[int]int{
 				0: 1000,
 				1: 1000,
+				2: 1000,
 			},
 		},
 	},

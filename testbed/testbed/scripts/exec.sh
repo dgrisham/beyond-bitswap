@@ -26,9 +26,9 @@ run_bitswap() {
         -tp max_connection_rate=${13} \
         -tp passive_count=${14} \
         -tp strategy_func=${15} \
-        -tp round_size=${16} \
-        --dep github.com/ipfs/go-bitswap=github.com/dgrisham/go-bitswap@peer-weights \
-        --dep github.com/ipfs/go-peertaskqueue=github.com/dgrisham/go-peertaskqueue@peer-weights
+        -tp round_size=${16}
+        # --dep github.com/ipfs/go-bitswap=github.com/dgrisham/go-bitswap@peer-weights \
+        # --dep github.com/ipfs/go-peertaskqueue=github.com/dgrisham/go-peertaskqueue@peer-weights
         # | tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'
 
 }

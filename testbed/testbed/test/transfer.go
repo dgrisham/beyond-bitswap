@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/crypto"
 
 	"github.com/protocol/beyond-bitswap/testbed/testbed/utils"
+	"github.com/protocol/beyond-bitswap/testbed/testbed/utils/dialer"
 )
 
 // Transfer data from S seeds to L leeches
@@ -172,8 +173,23 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
-			// Dial all peers
-			dialed, err := t.dialFn(ctx, h, t.nodetp, t.peerInfos, testvars.MaxConnectionRate)
+			var peersToDial []dialer.PeerInfo
+			switch t.nodetp {
+			case utils.Seed:
+				for _, peerInfo := range t.peerInfos {
+					if peerInfo.Nodetp == utils.Leech {
+						peersToDial = append(peersToDial, peerInfo)
+					}
+				}
+			case utils.Leech:
+				for _, peerInfo := range t.peerInfos {
+					if peerInfo.Nodetp == utils.Seed {
+						peersToDial = append(peersToDial, peerInfo)
+					}
+				}
+			}
+
+			dialed, err := t.dialFn(ctx, h, t.nodetp, peersToDial, testvars.MaxConnectionRate)
 			if err != nil {
 				return err
 			}
@@ -224,14 +240,20 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 								continue
 							}
 							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
-							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight)
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v/workRemaining:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight, receipt.WorkRemaining)
 							runenv.R().RecordPoint(receiptID, float64(1))
 						}
 
-						time.Sleep(time.Duration(1000)) // 1 ms (0.001 s) between each step
+						time.Sleep(1 * time.Millisecond) // 1 ms between each step
 					}
 				}
 			}()
+
+			// Wait for all nodes
+			err = signalAndWaitForAll("background-metric-gathering-started-" + runID)
+			if err != nil {
+				return err
+			}
 
 			/// --- Start test
 
@@ -239,10 +261,10 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			if t.nodetp == utils.Leech {
 				// Stagger the start of the first request from each leech
 				// Note: seq starts from 1 (not 0)
-				startDelay := time.Duration(t.seq-1) * testvars.RequestStagger
-				time.Sleep(startDelay)
+				// startDelay := time.Duration(t.seq-1) * testvars.RequestStagger
+				// time.Sleep(startDelay)
 
-				runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
+				// runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
 				start := time.Now()
 				err := bsnode.FetchGraph(ctx, rootCid)
 				timeToFetch = time.Since(start)
