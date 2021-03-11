@@ -230,6 +230,12 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				}
 			}()
 
+			// Wait for all nodes
+			err = signalAndWaitForAll("background-metric-gathering-started-" + runID)
+			if err != nil {
+				return err
+			}
+
 			/// --- Start test
 
 			var timeToFetch time.Duration
