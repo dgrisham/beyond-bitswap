@@ -1,7 +1,7 @@
 #!/bin/bash
 
 TESTGROUND_BIN="testground"
-CMD="run $TESTCASE $INSTANCES $FILE_SIZE $RUN_COUNT $LATENCY $JITTER $PARALLEL_GEN $LEECH_COUNT $BANDWIDTH $INPUT_DATA $DATA_DIR $TCP_ENABLED $MAX_CONNECTION_RATE $PASSIVE_COUNT $STRATEGY_FUNC $ROUND_SIZE"
+CMD="run $TESTCASE $INSTANCES $FILE_SIZE $RUN_COUNT $PARALLEL_GEN $LEECH_COUNT $INPUT_DATA $DATA_DIR $TCP_ENABLED $MAX_CONNECTION_RATE $PASSIVE_COUNT"
 # RUNNER="local:exec"
 # BUILDER="exec:go"
 
@@ -15,18 +15,13 @@ run_bitswap() {
         --runner=$RUNNER --instances=$2 \
         -tp file_size=$3 \
         -tp run_count=$4 \
-        -tp latency_ms=$5 \
-        -tp jitter_pct=$6 \
-        -tp parallel_gen_mb=$7 \
-        -tp leech_count=$8 \
-        -tp bandwidth_mb=$9 \
-        -tp input_data=${10} \
-        -tp data_dir=${11} \
-        -tp enable_tcp=${12} \
-        -tp max_connection_rate=${13} \
-        -tp passive_count=${14} \
-        -tp strategy_func=${15} \
-        -tp round_size=${16}
+        -tp parallel_gen_mb=$5 \
+        -tp leech_count=$6 \
+        -tp input_data=$7 \
+        -tp data_dir=$8 \
+        -tp enable_tcp=$9 \
+        -tp max_connection_rate=${10} \
+        -tp passive_count=${11}
         # --dep github.com/ipfs/go-bitswap=github.com/dgrisham/go-bitswap@peer-weights \
         # --dep github.com/ipfs/go-peertaskqueue=github.com/dgrisham/go-peertaskqueue@peer-weights
         # | tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'
@@ -34,8 +29,8 @@ run_bitswap() {
 }
 
 run() {
-    echo "Running test with ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${10}, ${11}, ${12}, ${13}, ${14}, ${15}, ${16}) (TESTCASE, INSTANCES, FILE_SIZE, RUN_COUNT, LATENCY, JITTER, PARALLEL, LEECH, BANDWIDTH, INPUT_DATA, DATA_DIR, TCP_ENABLED, MAX_CONNECTION_RATE, PASSIVE_COUNT, STRATEGY_FUNC, ROUND_SIZE)"
-    TESTID=`run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14} ${15} ${16} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }'`
+    echo "Running test with ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${10}, ${11}, ${12}, ${13}, ${14}) (TESTCASE, INSTANCES, FILE_SIZE, RUN_COUNT, PARALLEL, LEECH, INPUT_DATA, DATA_DIR, TCP_ENABLED, MAX_CONNECTION_RATE, PASSIVE_COUNT)"
+    TESTID=`run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }'`
     checkstatus $TESTID
     # `run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14}| tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'`
     # echo $TESTID
