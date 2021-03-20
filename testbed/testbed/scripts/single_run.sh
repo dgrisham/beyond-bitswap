@@ -12,7 +12,7 @@ echo "Cleaning previous results..."
 rm -rf ./results
 mkdir ./results
 
-FILE_SIZE=2007671680
+FILE_SIZE=107671680
 # FILE_SIZE=15728640,31457280,47185920,57671680
 RUN_COUNT=1
 INSTANCES=2

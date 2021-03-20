@@ -24,6 +24,7 @@ run_bitswap() {
         -tp enable_tcp=$9 \
         -tp max_connection_rate=${10} \
         -tp passive_count=${11}
+        # TODO: re-add options for setting bandwidth + latency + the third network param
         # | tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'
 
 }
@@ -31,6 +32,7 @@ run_bitswap() {
 run() {
     echo "Running test with ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${10}, ${11}, ${12}, ${13}, ${14}) (TESTCASE, INSTANCES, FILE_SIZE, RUN_COUNT, PARALLEL, LEECH, INPUT_DATA, DATA_DIR, TCP_ENABLED, MAX_CONNECTION_RATE, PASSIVE_COUNT)"
     TESTID=`run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }'`
+    TESTID=$(echo "$TESTID" | tr -d  ' ')
     checkstatus $TESTID
     # `run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14}| tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'`
     # echo $TESTID
@@ -38,8 +40,11 @@ run() {
     $TESTGROUND_BIN collect --runner=$RUNNER $TESTID
     tar xzvf $TESTID.tgz
     rm $TESTID.tgz
-    mv $TESTID ./results/
-    echo "Collected results"
+    local outdir="./results/master/p${2}-l${6}-f${3}"
+    mkdir -p $outdir
+    mv $TESTID $outdir
+    echo "results stored in: $outdir/$TESTID"
+    export $TESTID
 }
 
 getstatus() {
