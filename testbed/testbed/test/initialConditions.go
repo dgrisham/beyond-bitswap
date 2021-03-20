@@ -11,7 +11,7 @@ var initialSends = map[utils.NodeType]map[int]map[utils.NodeType]map[int]int{
 		},
 		1: map[utils.NodeType]map[int]int{
 			utils.Seed: map[int]int{
-				0: 5000000000,
+				0: 2500000000,
 			},
 		},
 		2: map[utils.NodeType]map[int]int{
