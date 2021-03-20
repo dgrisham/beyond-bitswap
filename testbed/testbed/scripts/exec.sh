@@ -34,9 +34,6 @@ run() {
     TESTID=`run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }'`
     TESTID=$(echo "$TESTID" | tr -d  ' ')
     checkstatus $TESTID
-    # `run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14}| tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'`
-    # echo $TESTID
-    # echo "Finished test $TESTID"
     $TESTGROUND_BIN collect --runner=$RUNNER $TESTID
     tar xzvf $TESTID.tgz
     rm $TESTID.tgz
