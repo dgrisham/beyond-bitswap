@@ -6,7 +6,7 @@ var initialSends = map[utils.NodeType]map[int]map[utils.NodeType]map[int]int{
 	utils.Leech: map[int]map[utils.NodeType]map[int]int{
 		0: map[utils.NodeType]map[int]int{
 			utils.Seed: map[int]int{
-				0: 1,
+				0: 500,
 			},
 		},
 		1: map[utils.NodeType]map[int]int{

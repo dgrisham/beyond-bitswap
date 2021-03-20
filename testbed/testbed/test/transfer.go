@@ -265,6 +265,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 				// runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
 				start := time.Now()
+
 				err := bsnode.FetchGraph(ctx, rootCid)
 				timeToFetch = time.Since(start)
 				if err != nil {
