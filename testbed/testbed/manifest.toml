@@ -8,7 +8,11 @@ exec_pkg = "."
 skip_runtime_image = true
 
 [extra_sources]
-  "docker:go" = ["../test-datasets"]
+docker_go = [
+    "../test-datasets",
+    "../extra/go-bitswap",
+    "../extra/go-peertaskqueue"
+]
 
 # extra_sources = { "exec:go" = ["./scripts/inputData"] }
 
