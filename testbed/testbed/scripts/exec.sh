@@ -1,12 +1,13 @@
 #!/bin/bash
 
 TESTGROUND_BIN="testground"
-CMD="run $TESTCASE $INSTANCES $FILE_SIZE $RUN_COUNT $PARALLEL_GEN $LEECH_COUNT $INPUT_DATA $DATA_DIR $TCP_ENABLED $MAX_CONNECTION_RATE $PASSIVE_COUNT"
+CMD="run $TESTCASE $INSTANCES $FILE_SIZE $RUN_COUNT $PARALLEL_GEN $LEECH_COUNT $INPUT_DATA $DATA_DIR $TCP_ENABLED $MAX_CONNECTION_RATE $PASSIVE_COUNT $BANDWIDTH $LATENCY $JITTER"
+
 # RUNNER="local:exec"
 # BUILDER="exec:go"
 
-RUNNER="local:docker"
-BUILDER="docker:go"
+# RUNNER="local:docker"
+# BUILDER="docker:go"
 
 run_bitswap() {
 
@@ -24,14 +25,17 @@ run_bitswap() {
         -tp data_dir=$8 \
         -tp enable_tcp=$9 \
         -tp max_connection_rate=${10} \
-        -tp passive_count=${11}
+        -tp passive_count=${11} \
+        -tp banwidth_mb=${12} \
+        -tp latency_ms=${13} \
+        -tp jitter_pct=${14}
         # TODO: re-add options for setting bandwidth + latency + the third network param
         # | tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'
 
 }
 
 run() {
-    echo "Running test with ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${10}, ${11}, ${12}, ${13}, ${14}) (TESTCASE, INSTANCES, FILE_SIZE, RUN_COUNT, PARALLEL, LEECH, INPUT_DATA, DATA_DIR, TCP_ENABLED, MAX_CONNECTION_RATE, PASSIVE_COUNT)"
+    echo "Running test with ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${10}, ${11}, ${12}, ${13}, ${14}) (TESTCASE, INSTANCES, FILE_SIZE, RUN_COUNT, PARALLEL, LEECH, INPUT_DATA, DATA_DIR, TCP_ENABLED, MAX_CONNECTION_RATE, PASSIVE_COUNT, BANDWIDTH, LATENCY, JITTER)"
     TESTID=`run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }'`
     TESTID=$(echo "$TESTID" | tr -d  ' ')
     checkstatus $TESTID

@@ -56,6 +56,6 @@ require (
 	golang.org/x/text v0.3.3 // indirect
 )
 
-replace github.com/ipfs/go-bitswap => ./extra/go-bitswap
-replace github.com/ipfs/go-peertaskqueue => ./extra/go-peertaskqueue
+replace github.com/ipfs/go-bitswap => github.com/dgrisham/go-bitswap master
+replace github.com/ipfs/go-peertaskqueue => github.com/dgrisham/go-peertaskqueue master
 
