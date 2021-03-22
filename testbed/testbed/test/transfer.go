@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/crypto"
 
 	"github.com/protocol/beyond-bitswap/testbed/testbed/utils"
+	"github.com/protocol/beyond-bitswap/testbed/testbed/utils/dialer"
 )
 
 // Transfer data from S seeds to L leeches
@@ -170,8 +171,23 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
-			// Dial all peers
-			dialed, err := t.dialFn(ctx, h, t.nodetp, t.peerInfos, testvars.MaxConnectionRate)
+			var peersToDial []dialer.PeerInfo
+			switch t.nodetp {
+			case utils.Seed:
+				for _, peerInfo := range t.peerInfos {
+					if peerInfo.Nodetp == utils.Leech {
+						peersToDial = append(peersToDial, peerInfo)
+					}
+				}
+			case utils.Leech:
+				for _, peerInfo := range t.peerInfos {
+					if peerInfo.Nodetp == utils.Seed {
+						peersToDial = append(peersToDial, peerInfo)
+					}
+				}
+			}
+
+			dialed, err := t.dialFn(ctx, h, t.nodetp, peersToDial, testvars.MaxConnectionRate)
 			if err != nil {
 				return err
 			}
