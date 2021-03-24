@@ -30,7 +30,7 @@ run_bitswap() {
 
 run() {
     echo "Running test with ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${10}, ${11}) (TESTCASE, INSTANCES, FILE_SIZE, RUN_COUNT, PARALLEL, LEECH, INPUT_DATA, DATA_DIR, TCP_ENABLED, MAX_CONNECTION_RATE, PASSIVE_COUNT)"
-    TESTID=`run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }'`
+    TESTID=$(run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} | tail -n 1 | awk -F 'run is queued with ID:' '{ print $2 }' | tr -d ' ')
     checkstatus $TESTID
     # `run_bitswap $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11} ${12} ${13} ${14}| tail -n 1 | awk -F 'run with ID: ' '{ print $2 }'`
     # echo $TESTID
@@ -38,11 +38,10 @@ run() {
     $TESTGROUND_BIN collect --runner=$RUNNER $TESTID
     tar xzvf $TESTID.tgz
     rm $TESTID.tgz
-    local outdir="./results/peer-weights/p${2}-l${6}-f${3}"
-    echo "outdir $outdir"
+    local outdir="./results/peer-weights/p${2}-l${6}-f$(echo $3 | tr ',' '_')-runs${4}-bw${12}-lat${13}-jit${14}"
     mkdir -p $outdir
     mv $TESTID $outdir
-    echo "Collected results"
+    echo "results stored in: $outdir/$TESTID"
 }
 
 getstatus() {
