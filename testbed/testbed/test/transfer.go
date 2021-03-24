@@ -203,14 +203,14 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 				numBytesSent := getInitialSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
 				if numBytesSent != 0 {
-					runenv.RecordMessage("Adding %d bytes to sent value in ledger for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
-					bsnode.Bitswap.AddToLedgerSentBytes(peerInfo.Addr.ID, numBytesSent)
+					runenv.RecordMessage("Setting sent value in ledger to %d bytes for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					bsnode.Bitswap.SetLedgerSentBytes(peerInfo.Addr.ID, int(numBytesSent))
 				}
 
 				numBytesRcvd := getInitialSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
 				if numBytesRcvd != 0 {
-					runenv.RecordMessage("Adding %d bytes to received value ledger for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
-					bsnode.Bitswap.AddToLedgerReceivedBytes(peerInfo.Addr.ID, numBytesRcvd)
+					runenv.RecordMessage("Setting received value in ledger to %d bytes for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					bsnode.Bitswap.SetLedgerReceivedBytes(peerInfo.Addr.ID, int(numBytesRcvd))
 				}
 			}
 
@@ -239,6 +239,10 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
 							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
 							runenv.R().RecordPoint(receiptID, float64(1))
+
+							// save ledger sends in case there are more runs/files
+							setSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex, receipt.Sent)
+							setSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex, receipt.Sent)
 						}
 
 						time.Sleep(1 * time.Millisecond) // 1 ms between each step
@@ -277,24 +281,12 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
+			quit <- true
+
 			/// --- Report stats
 			err = emitMetrics(runenv, bsnode, runNum, t.seq, t.grpseq, t.latency, t.bandwidth, fileSize, t.nodetp, t.tpindex, timeToFetch)
 			if err != nil {
 				return err
-			}
-
-			// Shut down bitswap
-			err = bsnode.Close()
-			if err != nil {
-				return fmt.Errorf("Error closing Bitswap: %w", err)
-			}
-
-			// Disconnect peers
-			for _, c := range h.Network().Conns() {
-				err := c.Close()
-				if err != nil {
-					return fmt.Errorf("Error disconnecting: %w", err)
-				}
 			}
 
 			if t.nodetp == utils.Leech {
@@ -306,6 +298,14 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 					return fmt.Errorf("Error clearing blockstore: %w", err)
 				}
 			}
+
+			// Disconnect peers
+			for _, c := range h.Network().Conns() {
+				err := c.Close()
+				if err != nil {
+					return fmt.Errorf("Error disconnecting: %w", err)
+				}
+			}
 		}
 		if t.nodetp == utils.Seed {
 			// Free up memory by clearing the seed blockstore at the end of each
@@ -314,6 +314,12 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return fmt.Errorf("Error clearing blockstore: %w", err)
 			}
 		}
+	}
+
+	// Shut down bitswap
+	err = bsnode.Close()
+	if err != nil {
+		return fmt.Errorf("Error closing Bitswap: %w", err)
 	}
 
 	/// --- Ending the test

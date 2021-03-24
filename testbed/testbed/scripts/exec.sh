@@ -42,7 +42,7 @@ run() {
     $TESTGROUND_BIN collect --runner=$RUNNER $TESTID
     tar xzvf $TESTID.tgz
     rm $TESTID.tgz
-    local outdir="./results/master/p${2}-l${6}-f${3}"
+    local outdir="./results/master/p${2}-l${6}-f$(echo $3 | tr ',' '_')-runs${4}-bw${12}-lat${13}-jit${14}"
     mkdir -p $outdir
     mv $TESTID $outdir
     echo "results stored in: $outdir/$TESTID"
