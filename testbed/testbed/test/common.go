@@ -50,6 +50,8 @@ type TestVars struct {
 	NumWaves          int
 	Permutations      []TestPermutation
 	DiskStore         bool
+	StrategyFunc      string
+	RoundSize         int
 }
 
 type TestData struct {
@@ -129,6 +131,15 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// @dgrisham: Bitswap peer-weights config values
+	if runenv.IsParamSet("strategy_func") {
+		tv.StrategyFunc = runenv.StringParam("strategy_func")
+	}
+	if runenv.IsParamSet("round_size") {
+		tv.RoundSize = runenv.IntParam("round_size")
+	}
+
 	testFiles, err := utils.GetFileList(runenv)
 	if err != nil {
 		return nil, err

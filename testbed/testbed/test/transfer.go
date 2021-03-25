@@ -182,7 +182,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 								continue
 							}
 							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
-							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v/workRemaining:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight, receipt.WorkRemaining)
 							runenv.R().RecordPoint(receiptID, float64(1))
 
 							// save ledger sends in case there are more runs/files
@@ -336,7 +336,7 @@ func initializeBitswapTest(ctx context.Context, runenv *runtime.RunEnv, testvars
 		return nil, err
 	}
 	// Create a new bitswap node from the blockstore
-	bsnode, err := utils.CreateBitswapNode(ctx, h, bstore)
+	bsnode, err := utils.CreateBitswapNode(ctx, h, bstore, testvars.StrategyFunc, testvars.RoundSize)
 	if err != nil {
 		return nil, err
 	}

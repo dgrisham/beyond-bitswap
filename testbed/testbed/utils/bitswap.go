@@ -112,13 +112,13 @@ func ClearBlockstore(ctx context.Context, bstore blockstore.Blockstore) error {
 	return g.Wait()
 }
 
-func CreateBitswapNode(ctx context.Context, h host.Host, bstore blockstore.Blockstore) (*BitswapNode, error) {
+func CreateBitswapNode(ctx context.Context, h host.Host, bstore blockstore.Blockstore, strategyFunc string, roundSize int) (*BitswapNode, error) {
 	routing, err := nilrouting.ConstructNilRouting(ctx, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	net := bsnet.NewFromIpfsHost(h, routing)
-	bitswap := bs.New(ctx, net, bstore).(*bs.Bitswap)
+	bitswap := bs.NewPeerWeights(ctx, net, bstore, strategyFunc, roundSize).(*bs.Bitswap)
 	bserv := blockservice.New(bstore, bitswap)
 	dserv := merkledag.NewDAGService(bserv)
 	return &BitswapNode{bitswap, bstore, dserv, h}, nil
