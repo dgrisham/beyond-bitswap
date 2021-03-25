@@ -1,8 +1,12 @@
 experiments/
 my-datasets/
 datasets/
+testDatasets/
 results/
 .idea
 testbed/.DS_Store
 testbed/compositions/.DS_Store
 testbed/test-datasets/*
+data/
+plans/
+testbed/extra
