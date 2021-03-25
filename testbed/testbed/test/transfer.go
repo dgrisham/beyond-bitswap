@@ -164,6 +164,42 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				}
 			}
 
+			// @dgrisham start time series metric gathering functions
+			quit := make(chan bool)
+			go func() { // record bitswap metrics in the background while fetching blocks
+
+				for {
+					select {
+
+					case <-quit: // loop until signal is received
+						return
+
+					default:
+
+						for _, peerInfo := range t.peerInfos {
+							if peerInfo.Addr.ID == (*(t.host)).ID() {
+								continue
+							}
+							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
+							runenv.R().RecordPoint(receiptID, float64(1))
+
+							// save ledger sends in case there are more runs/files
+							setSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex, receipt.Sent)
+							setSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex, receipt.Sent)
+						}
+
+						time.Sleep(1 * time.Millisecond) // 1 ms between each step
+					}
+				}
+			}()
+
+			// Wait for all nodes
+			err = signalAndWaitForAll("background-metric-gathering-started-" + runID)
+			if err != nil {
+				return err
+			}
+
 			/// --- Start test
 
 			var timeToFetch time.Duration
