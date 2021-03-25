@@ -14,6 +14,7 @@ run_bitswap(){
         --testcase=$1 \
         --builder=$BUILDER \
         --runner=$RUNNER --instances=$2 \
+        -tp node_type="bitswap" \
         -tp file_size=$3 \
         -tp run_count=$4 \
         -tp latency_ms=$5 \

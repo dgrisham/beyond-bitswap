@@ -53,4 +53,9 @@ require (
 	golang.org/x/text v0.3.3 // indirect
 )
 
-replace github.com/ipfs/go-bitswap => github.com/adlrocha/go-bitswap v0.2.20-0.20201006081544-fad1a007cf9b
+// replace github.com/ipfs/go-bitswap => github.com/adlrocha/go-bitswap v0.2.20-0.20201006081544-fad1a007cf9b
+replace github.com/ipfs/go-bitswap => /home/grish/src/ipfs/go-bitswap
+replace github.com/ipfs/go-peertaskqueue => /home/grish/src/ipfs/go-peertaskqueue
+
+// replace github.com/ipfs/go-bitswap => github.com/dgrisham/go-bitswap 0d6801d
+// replace github.com/ipfs/go-peertaskqueue => github.com/dgrisham/go-peertaskqueue peer-weights

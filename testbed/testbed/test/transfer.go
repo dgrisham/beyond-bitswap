@@ -113,11 +113,29 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 			runenv.RecordMessage("Starting run %d / %d (%d bytes)", runNum, testvars.RunCount, testParams.File.Size())
 
-			dialed, err := t.dialFn(ctx, transferNode.Host(), t.nodetp, t.peerInfos, testvars.MaxConnectionRate)
+			// @dgrisham: all seeders and leechers are connected, but no two nodes of the same type connect to each
+			// other (so no seed <-> seed or leech <-> leech connections)
+			var peersToDial []utils.PeerInfo
+			switch t.nodetp {
+			case utils.Seed:
+				for _, peerInfo := range t.peerInfos {
+					if peerInfo.Nodetp == utils.Leech {
+						peersToDial = append(peersToDial, peerInfo)
+					}
+				}
+			case utils.Leech:
+				for _, peerInfo := range t.peerInfos {
+					if peerInfo.Nodetp == utils.Seed {
+						peersToDial = append(peersToDial, peerInfo)
+					}
+				}
+			}
+
+			dialed, err := t.dialFn(ctx, *t.host, t.nodetp, peersToDial, testvars.MaxConnectionRate)
 			if err != nil {
 				return err
 			}
-			runenv.RecordMessage("%s Dialed %d other nodes:", t.nodetp.String(), len(dialed))
+			runenv.RecordMessage("Dialed %d other nodes", len(dialed))
 
 			// Wait for all nodes to be connected
 			err = signalAndWaitForAll("connect-complete-" + runID)
@@ -211,12 +229,11 @@ var supportedNodes = map[string]nodeInitializer{
 	"graphsync":  initializeGraphsyncTest,
 	"libp2pHTTP": initializeLibp2pHTTPTest,
 	"rawLibp2p":  initializeRawLibp2pTest,
-	//TODO FIX HTTP
+	// TODO FIX HTTP
 	//"http":       initializeHTTPTest,
 }
 
 func initializeIPFSTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestVars, baseT *TestData) (*NodeTestData, error) {
-
 	// Create IPFS node
 	runenv.RecordMessage("Preparing exchange for node: %v", testvars.ExchangeInterface)
 	// Set exchange Interface
@@ -270,7 +287,6 @@ func initializeBitswapTest(ctx context.Context, runenv *runtime.RunEnv, testvars
 }
 
 func initializeGraphsyncTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestVars, baseT *TestData) (*NodeTestData, error) {
-
 	h, err := makeHost(ctx, baseT)
 	if err != nil {
 		return nil, err
