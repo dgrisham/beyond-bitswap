@@ -174,7 +174,7 @@ func InitializeTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestV
 
 	peerInfos := sync.NewTopic("peerInfos", &utils.PeerInfo{})
 	// Publish peer info for dialing
-	_, err = client.Publish(ctx, peerInfos, &utils.PeerInfo{Addr: *nConfig.AddrInfo, Nodetp: nodetp})
+	_, err = client.Publish(ctx, peerInfos, &utils.PeerInfo{Addr: *nConfig.AddrInfo, Nodetp: nodetp, TpIndex: tpindex})
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +228,11 @@ func InitializeTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestV
 		return err
 	}
 
-	return &TestData{client, nwClient,
+	return &TestData{
+		client, nwClient,
 		nConfig, infos, dialFn, signalAndWaitForAll,
-		seq, grpseq, nodetp, tpindex, seedIndex}, nil
+		seq, grpseq, nodetp, tpindex, seedIndex,
+	}, nil
 }
 
 func (t *TestData) publishFile(ctx context.Context, fIndex int, cid *cid.Cid, runenv *runtime.RunEnv) error {
@@ -366,6 +368,7 @@ func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int, f utils.T
 	}
 	return cid.Undef, nil
 }
+
 func (t *NodeTestData) cleanupRun(ctx context.Context, rootCid cid.Cid, runenv *runtime.RunEnv) error {
 	// Disconnect peers
 	for _, c := range t.node.Host().Network().Conns() {
@@ -409,7 +412,6 @@ func (t *NodeTestData) close() error {
 func (t *NodeTestData) emitMetrics(runenv *runtime.RunEnv, runNum int, transport string,
 	permutation TestPermutation, timeToFetch time.Duration, tcpFetch int64, leechFails int64,
 	maxConnectionRate int) error {
-
 	recorder := newMetricsRecorder(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.File.Size()), t.nodetp, t.tpindex, maxConnectionRate)
 	if t.nodetp == utils.Leech {
 		recorder.Record("time_to_fetch", float64(timeToFetch))
@@ -500,8 +502,7 @@ func getNodeSetSeq(ctx context.Context, client *sync.DefaultClient, addrInfo *pe
 }
 
 func fractionalDAG(ctx context.Context, runenv *runtime.RunEnv, seedIndex int, c cid.Cid, dserv ipld.DAGService) error {
-
-	//TODO: Explore this seed_fraction parameter.
+	// TODO: Explore this seed_fraction parameter.
 	if !runenv.IsParamSet("seed_fraction") {
 		return nil
 	}
@@ -581,7 +582,6 @@ type metricsRecorder struct {
 func newMetricsRecorder(runenv *runtime.RunEnv, runNum int, seq int64, grpseq int64,
 	transport string, latency time.Duration, bandwidthMB int, fileSize int, nodetp utils.NodeType, tpindex int,
 	maxConnectionRate int) utils.MetricsRecorder {
-
 	latencyMS := latency.Milliseconds()
 	instance := runenv.TestInstanceCount
 	leechCount := runenv.IntParam("leech_count")

@@ -143,6 +143,27 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
+			bsnode, ok := t.node.(*utils.BitswapNode)
+			if !ok {
+				return errors.New("Not a Bitswap node, existing")
+			}
+
+			// @dgrisham: set up bitswap ledgers
+			for _, peerInfo := range t.peerInfos {
+
+				numBytesSent := getInitialSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
+				if numBytesSent != 0 {
+					runenv.RecordMessage("Setting sent value in ledger to %d bytes for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					bsnode.Bitswap.SetLedgerSentBytes(peerInfo.Addr.ID, int(numBytesSent))
+				}
+
+				numBytesRcvd := getInitialSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
+				if numBytesRcvd != 0 {
+					runenv.RecordMessage("Setting received value in ledger to %d bytes for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					bsnode.Bitswap.SetLedgerReceivedBytes(peerInfo.Addr.ID, int(numBytesRcvd))
+				}
+			}
+
 			/// --- Start test
 
 			var timeToFetch time.Duration

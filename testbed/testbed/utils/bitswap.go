@@ -47,14 +47,14 @@ func (nt NodeType) String() string {
 // Adapted from the netflix/p2plab repo under an Apache-2 license.
 // Original source code located at https://github.com/Netflix/p2plab/blob/master/peer/peer.go
 type BitswapNode struct {
-	bitswap    *bs.Bitswap
+	Bitswap    *bs.Bitswap
 	blockStore blockstore.Blockstore
 	dserv      ipld.DAGService
 	h          host.Host
 }
 
 func (n *BitswapNode) Close() error {
-	return n.bitswap.Close()
+	return n.Bitswap.Close()
 }
 
 func CreateBlockstore(ctx context.Context, dStore ds.Batching) (blockstore.Blockstore, error) {
@@ -147,8 +147,7 @@ func (n *BitswapNode) ClearDatastore(ctx context.Context, _ cid.Cid) error {
 }
 
 func (n *BitswapNode) EmitMetrics(recorder MetricsRecorder) error {
-	stats, err := n.bitswap.Stat()
-
+	stats, err := n.Bitswap.Stat()
 	if err != nil {
 		return err
 	}
@@ -185,8 +184,7 @@ func (n *BitswapNode) Host() host.Host {
 }
 
 func (n *BitswapNode) EmitKeepAlive(recorder MessageRecorder) error {
-	stats, err := n.bitswap.Stat()
-
+	stats, err := n.Bitswap.Stat()
 	if err != nil {
 		return err
 	}
