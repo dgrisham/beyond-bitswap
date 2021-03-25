@@ -42,7 +42,7 @@ type PathFile struct {
 func (f *RandFile) GenerateFile() (files.Node, error) {
 	r := SeededRandReader(int(f.size), f.seed)
 
-	path := fmt.Sprintf("/tmp-%d", rand.Uint64())
+	path := fmt.Sprintf("/tmp/%d", rand.Uint64())
 	tf, err := os.Create(path)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,8 @@ func GetFileList(runenv *runtime.RunEnv) ([]TestFile, error) {
 				&PathFile{
 					Path:  path + "/" + file.Name(),
 					size:  size,
-					isDir: file.IsDir()})
+					isDir: file.IsDir(),
+				})
 		}
 		return listFiles, nil
 	case "random":
