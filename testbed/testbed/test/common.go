@@ -52,6 +52,7 @@ type TestVars struct {
 	DiskStore         bool
 	StrategyFunc      string
 	RoundSize         int
+	InitialRatios     []float64
 }
 
 type TestData struct {
@@ -117,6 +118,12 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 	}
 	if runenv.IsParamSet("disk_store") {
 		tv.DiskStore = runenv.BooleanParam("disk_store")
+	}
+
+	var err error
+	tv.InitialRatios, err = utils.ParseFloatArray(runenv.StringParam("initial_ratios"))
+	if err != nil {
+		return nil, err
 	}
 
 	bandwidths, err := utils.ParseIntArray(runenv.StringParam("bandwidth_mb"))

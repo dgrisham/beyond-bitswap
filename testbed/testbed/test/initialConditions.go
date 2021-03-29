@@ -1,69 +1,72 @@
 package test
 
-import "github.com/protocol/beyond-bitswap/testbed/testbed/utils"
+import (
+	"github.com/protocol/beyond-bitswap/testbed/testbed/utils"
+	"github.com/testground/sdk-go/runtime"
+)
 
-var initialSends = map[utils.NodeType]map[int]map[utils.NodeType]map[int]uint64{
-	utils.Leech: map[int]map[utils.NodeType]map[int]uint64{
-		0: {
+type Exchanges map[utils.NodeType]map[int]map[utils.NodeType]map[int]uint64
+
+var exchanges Exchanges
+
+func makeInitialSends(runenv *runtime.RunEnv, ratios []float64) Exchanges {
+	initialSends := Exchanges{
+		utils.Seed: {
+			0: {
+				utils.Leech: {
+					0: 200000000,
+					1: 200000000,
+					2: 1000,
+				},
+			},
+		},
+		utils.Leech: {},
+	}
+
+	for i, ratio := range ratios {
+		initialSends[utils.Leech][i] = map[utils.NodeType]map[int]uint64{
 			utils.Seed: {
-				0: 1,
+				0: uint64(ratio * float64(initialSends[utils.Seed][0][utils.Leech][i])),
 			},
-		},
-		1: {
-			utils.Seed: {
-				0: 25000,
-			},
-		},
-		2: {
-			utils.Seed: {
-				0: 500000,
-			},
-		},
-	},
-	utils.Seed: {
-		0: {
-			utils.Leech: {
-				0: 1000,
-				1: 1000,
-				2: 1000,
-			},
-		},
-	},
+		}
+	}
+
+	return initialSends
 }
 
-func getInitialSend(senderType utils.NodeType, senderIndex int, recvType utils.NodeType, recvIndex int) uint64 {
-	if _, ok := initialSends[senderType]; !ok {
+func getBytesSent(senderType utils.NodeType, senderIndex int, recvType utils.NodeType, recvIndex int) uint64 {
+	if _, ok := exchanges[senderType]; !ok {
 		return 0
 	}
-	if _, ok := initialSends[senderType][senderIndex]; !ok {
+	if _, ok := exchanges[senderType][senderIndex]; !ok {
 		return 0
 	}
-	if _, ok := initialSends[senderType][senderIndex][recvType]; !ok {
+	if _, ok := exchanges[senderType][senderIndex][recvType]; !ok {
 		return 0
 	}
-	if _, ok := initialSends[senderType][senderIndex][recvType][recvIndex]; !ok {
+	if _, ok := exchanges[senderType][senderIndex][recvType][recvIndex]; !ok {
 		return 0
 	}
 
-	return initialSends[senderType][senderIndex][recvType][recvIndex]
+	return exchanges[senderType][senderIndex][recvType][recvIndex]
 }
 
-func setSend(senderType utils.NodeType, senderIndex int, recvType utils.NodeType, recvIndex int, bytes uint64) {
-	if _, ok := initialSends[senderType]; !ok {
+func setBytesSent(senderType utils.NodeType, senderIndex int, recvType utils.NodeType, recvIndex int, bytes uint64) {
+	if _, ok := exchanges[senderType]; !ok {
 		return
 	}
-	if _, ok := initialSends[senderType][senderIndex]; !ok {
+	if _, ok := exchanges[senderType][senderIndex]; !ok {
 		return
 	}
-	if _, ok := initialSends[senderType][senderIndex][recvType]; !ok {
+	if _, ok := exchanges[senderType][senderIndex][recvType]; !ok {
 		return
 	}
-	if _, ok := initialSends[senderType][senderIndex][recvType][recvIndex]; !ok {
+	if _, ok := exchanges[senderType][senderIndex][recvType][recvIndex]; !ok {
 		return
 	}
 
-	if initialSends[senderType][senderIndex][recvType][recvIndex] < bytes {
-		initialSends[senderType][senderIndex][recvType][recvIndex] = bytes
+	if exchanges[senderType][senderIndex][recvType][recvIndex] < bytes {
+		exchanges[senderType][senderIndex][recvType][recvIndex] = bytes
 	}
 }
 

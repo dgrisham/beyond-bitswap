@@ -28,6 +28,8 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	}
 	nodeType := runenv.StringParam("node_type")
 
+	exchanges = makeInitialSends(runenv, testvars.InitialRatios)
+
 	/// --- Set up
 	ctx, cancel := context.WithTimeout(context.Background(), testvars.Timeout)
 	defer cancel()
@@ -152,13 +154,13 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			// @dgrisham: set up bitswap ledgers
 			for _, peerInfo := range t.peerInfos {
 
-				numBytesSent := getInitialSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
+				numBytesSent := getBytesSent(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
 				if numBytesSent != 0 {
 					runenv.RecordMessage("Setting sent value in ledger to %d bytes for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.SetLedgerSentBytes(peerInfo.Addr.ID, int(numBytesSent))
 				}
 
-				numBytesRcvd := getInitialSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
+				numBytesRcvd := getBytesSent(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
 				if numBytesRcvd != 0 {
 					runenv.RecordMessage("Setting received value in ledger to %d bytes for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.SetLedgerReceivedBytes(peerInfo.Addr.ID, int(numBytesRcvd))
@@ -182,15 +184,16 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 								continue
 							}
 							receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
-							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v/workRemaining:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight, receipt.WorkRemaining)
+							roundReset := bsnode.Bitswap.RoundReset()
+							receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v/workRemaining:%v/roundReset:%t", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight, receipt.WorkRemaining, roundReset)
 							runenv.R().RecordPoint(receiptID, float64(1))
 
 							// save ledger sends in case there are more runs/files
-							setSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex, receipt.Sent)
-							setSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex, receipt.Sent)
+							setBytesSent(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex, receipt.Sent)
+							setBytesSent(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex, receipt.Sent)
 						}
 
-						time.Sleep(1 * time.Millisecond) // 1 ms between each step
+						time.Sleep(1000 * time.Microsecond) // 1 ms between each step
 					}
 				}
 			}()
@@ -212,10 +215,10 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 						runenv.RecordMessage("Starting wave %d", waveNum)
 						// Stagger the start of the first request from each leech
 						// Note: seq starts from 1 (not 0)
-						startDelay := time.Duration(t.seq-1) * testvars.RequestStagger
+						// startDelay := time.Duration(t.seq-1) * testvars.RequestStagger
 
 						runenv.RecordMessage("Starting to leech %d / %d (%d bytes)", runNum, testvars.RunCount, testParams.File.Size())
-						runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
+						// runenv.RecordMessage("Leech fetching data after %s delay", startDelay)
 						start := time.Now()
 						// TODO: Here we may be able to define requesting pattern. ipfs.DAG()
 						// Right now using a path.
