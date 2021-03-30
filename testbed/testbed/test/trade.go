@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/testground/sdk-go/run"
@@ -48,22 +49,30 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	// bandwidth + latency + jitter options used for all of the permutations
 	testParams := testvars.Permutations[t.tpindex]
 
+	runenv.RecordMessage("Initializing network")
+
 	// Set up network (with traffic shaping)
 	if err := utils.SetupNetwork(ctx, runenv, t.nwClient, t.nodetp, t.tpindex, testParams.Latency,
 		testParams.Bandwidth, testParams.JitterPct); err != nil {
 		return fmt.Errorf("Failed to set up network: %v", err)
 	}
 
+	runenv.RecordMessage("Network initialized")
+
 	// Accounts for every file that couldn't be found.
 	var fetchFails int64
 	publishedRootCids := []cid.Cid{}
 	fetchedRootCids := []cid.Cid{}
 
+	runenv.RecordMessage("Network initialized")
+
 	// Wait for all nodes to be ready to start the run
-	err = signalAndWaitForAll(fmt.Sprintf("start-file-%d", t.tpindex))
+	err = signalAndWaitForAll("start-cid-publish")
 	if err != nil {
 		return err
 	}
+
+	runenv.RecordMessage("Publishing file CIDs...")
 
 	switch t.tpindex {
 	case 0: // 0'th peer downloads from  + uploads to everyone
@@ -79,10 +88,11 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		// grab cids to download from all peers
 		for i := 1; i < len(testvars.Permutations); i++ {
 			var fetchedCid cid.Cid
-			fetchedCid, err = t.addPublishFile(ctx, i, testParams.File, runenv, testvars)
+			fetchedCid, err = t.readFile(ctx, i, runenv, testvars)
 			if err != nil {
 				return fmt.Errorf("Error fetching cid #%d: %s", i, err.Error())
 			}
+			runenv.RecordMessage(fmt.Sprintf("Successfuly fetched cid #%d: %s", i, fetchedCid))
 			fetchedRootCids = append(fetchedRootCids, fetchedCid)
 		}
 
@@ -96,16 +106,17 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		publishedRootCids = append(publishedRootCids, publishedCid)
 
 		// grab cid to download from i
-		fetchedCid, err := t.addPublishFile(ctx, 0, testParams.File, runenv, testvars)
+		fetchedCid, err := t.readFile(ctx, 0, runenv, testvars)
 		if err != nil {
 			return err
 		}
+		runenv.RecordMessage(fmt.Sprintf("Successfuly fetched cid #0: %s", fetchedCid))
 		fetchedRootCids = append(fetchedRootCids, fetchedCid)
 	}
 
 	runenv.RecordMessage("File injest complete...")
 	// Wait for all nodes to be ready to dial
-	err = signalAndWaitForAll(fmt.Sprintf("injest-complete-%d", t.tpindex))
+	err = signalAndWaitForAll("injest-complete")
 	if err != nil {
 		return err
 	}
@@ -117,7 +128,7 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		ctx, cancel := context.WithTimeout(ctx, testvars.RunTimeout)
 		defer cancel()
 
-		runID := fmt.Sprintf("%d-%d", t.tpindex, runNum)
+		runID := fmt.Sprintf("%d", runNum)
 
 		// Wait for all nodes to be ready to start the run
 		err = signalAndWaitForAll("start-run-" + runID)
@@ -216,9 +227,13 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		/// --- Start test
 
 		fetchResults := make([]fetchResult, len(fetchedRootCids))
+		var wg sync.WaitGroup
 		for fetchIdx, fetchCid := range fetchedRootCids { // download all cids in parallel
+			wg.Add(1)
 
-			go func(idx int, cid cid.Cid) {
+			go func(idx int, cid cid.Cid, wg *sync.WaitGroup) {
+				defer wg.Done()
+
 				start := time.Now()
 				runenv.RecordMessage("Starting to fetch index #%d, %d / %d (%d bytes)", runNum, idx, testvars.RunCount, testParams.File.Size())
 
@@ -238,11 +253,13 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 					runenv.RecordMessage("Fetch of %d complete (%d ns)", s, timeToFetch)
 				}
 				cancel()
-			}(fetchIdx, fetchCid)
+			}(fetchIdx, fetchCid, &wg)
 		}
 
+		wg.Wait()
+
 		// Wait for all downloads to complete
-		err = signalAndWaitForAll("transfer-complete-" + runID)
+		err = signalAndWaitForAll("transfer-complete")
 		if err != nil {
 			return err
 		}

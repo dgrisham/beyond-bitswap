@@ -143,6 +143,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
+			// @dgrisham: we only want to run bitswap tests
 			bsnode, ok := t.node.(*utils.BitswapNode)
 			if !ok {
 				return errors.New("Not a Bitswap node, existing")

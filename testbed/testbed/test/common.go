@@ -422,6 +422,27 @@ func (t *NodeTestData) emitMetrics(runenv *runtime.RunEnv, runNum int, transport
 	return t.node.EmitMetrics(recorder)
 }
 
+type fetchResult struct {
+	CID  cid.Cid
+	Time time.Duration
+}
+
+// @dgrisham
+func (t *NodeTestData) emitMetricsTrade(runenv *runtime.RunEnv, runNum int, transport string,
+	permutation TestPermutation, fetchResults []fetchResult, tcpFetch int64, fetchFails int64,
+	maxConnectionRate int) error {
+	// emit download time for each fetched Cid
+	for fetchIdx, fetchResult := range fetchResults {
+		recorder := newMetricsRecorderTrade(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.File.Size()), t.nodetp, t.tpindex, maxConnectionRate, fetchResult.CID.String())
+		recorder.Record("fetch_time", float64(fetchResult.Time))
+		if err := t.node.EmitMetrics(recorder); err != nil {
+			return fmt.Errorf("Error emitting metrics for fetch idx %d: %s", fetchIdx, err.Error())
+		}
+	}
+
+	return nil
+}
+
 func generateAndAdd(ctx context.Context, runenv *runtime.RunEnv, node utils.Node, f utils.TestFile) (*cid.Cid, error) {
 	// Generate the file
 	inputData := runenv.StringParam("input_data")
@@ -596,4 +617,20 @@ func newMetricsRecorder(runenv *runtime.RunEnv, runNum int, seq int64, grpseq in
 
 func (mr *metricsRecorder) Record(key string, value float64) {
 	mr.runenv.R().RecordPoint(fmt.Sprintf("%s/name:%s", mr.id, key), value)
+}
+
+// @dgrisham
+func newMetricsRecorderTrade(runenv *runtime.RunEnv, runNum int, seq int64, grpseq int64,
+	transport string, latency time.Duration, bandwidthMB int, fileSize int, nodetp utils.NodeType, tpindex int,
+	maxConnectionRate int, fetchCid string) utils.MetricsRecorder {
+	latencyMS := latency.Milliseconds()
+	instance := runenv.TestInstanceCount
+	leechCount := runenv.IntParam("leech_count")
+	passiveCount := runenv.IntParam("passive_count")
+
+	id := fmt.Sprintf("topology:(%d-%d-%d)/transport:%s/maxConnectionRate:%d/latencyMS:%d/bandwidthMB:%d/run:%d/seq:%d/groupName:%s/groupSeq:%d/fileSize:%d/nodeType:%s/nodeTypeIndex:%d/fetchCid:%s",
+		instance-leechCount-passiveCount, leechCount, passiveCount, transport, maxConnectionRate,
+		latencyMS, bandwidthMB, runNum, seq, runenv.TestGroupID, grpseq, fileSize, nodetp, tpindex, fetchCid)
+
+	return &metricsRecorder{runenv, id}
 }
