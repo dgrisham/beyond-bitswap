@@ -209,8 +209,8 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 						runenv.R().RecordPoint(receiptID, float64(1))
 
 						// save ledger sends in case there are more runs/files
-						setSend(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex, receipt.Sent)
-						setSend(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex, receipt.Sent)
+						setSendTrade(t.tpindex, peerInfo.TpIndex, receipt.Sent)
+						setSendTrade(peerInfo.TpIndex, t.tpindex, receipt.Sent)
 					}
 
 					time.Sleep(1 * time.Millisecond) // 1 ms between each step
