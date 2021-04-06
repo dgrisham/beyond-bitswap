@@ -26,14 +26,14 @@ type TCPServer struct {
 
 // SpawnTCPServer Spawns a TCP server that serves a specific file.
 func SpawnTCPServer(ctx context.Context, ip string, tmpFile TestFile) (*TCPServer, error) {
-	//Create a TCP istener on localhost with porth 27001
+	// Create a TCP istener on localhost with porth 27001
 	listener, err := net.Listen("tcp", ip+":0")
 	fmt.Println("listening at: ", listener.Addr().String())
 	if err != nil {
 		fmt.Println("Error listetning: ", err)
 		return nil, err
 	}
-	//Spawn a new goroutine whenever a client connects
+	// Spawn a new goroutine whenever a client connects
 	s := &TCPServer{
 		quit:     make(chan interface{}),
 		listener: listener,
@@ -93,7 +93,7 @@ func (s *TCPServer) sendFileToClient(connection net.Conn) {
 	// Passing files.Node directly produced that routines
 	// concurrently accessed their reader. Instead of sending the
 	// file n times, each client received a part.
-	tmpFile, err := s.file.GenerateFile()
+	tmpFile, _, err := s.file.GenerateFile()
 	if err != nil {
 		fmt.Println("Failed generating file:", err)
 		return

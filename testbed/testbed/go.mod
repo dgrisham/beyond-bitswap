@@ -55,8 +55,8 @@ require (
 
 // replace github.com/ipfs/go-bitswap => github.com/adlrocha/go-bitswap v0.2.20-0.20201006081544-fad1a007cf9b
 
-// replace github.com/ipfs/go-bitswap => /home/grish/src/ipfs/go-bitswap
-// replace github.com/ipfs/go-peertaskqueue => /home/grish/src/ipfs/go-peertaskqueue
+replace github.com/ipfs/go-bitswap => /home/grish/src/ipfs/go-bitswap
+replace github.com/ipfs/go-peertaskqueue => /home/grish/src/ipfs/go-peertaskqueue
 
-replace github.com/ipfs/go-bitswap => github.com/dgrisham/go-bitswap eacb604
-replace github.com/ipfs/go-peertaskqueue => github.com/dgrisham/go-peertaskqueue 6f72359
+// replace github.com/ipfs/go-bitswap => github.com/dgrisham/go-bitswap 469558f
+// replace github.com/ipfs/go-peertaskqueue => github.com/dgrisham/go-peertaskqueue peer-weights

@@ -177,6 +177,58 @@ func (n *BitswapNode) Fetch(ctx context.Context, c cid.Cid, _ []PeerInfo) (files
 	return unixfile.NewUnixfsFile(ctx, n.dserv, nd)
 }
 
+func (n *BitswapNode) FetchAll(ctx context.Context, cids []cid.Cid, _ []PeerInfo) ([]uint64, []error) {
+	for _, c := range cids {
+		err := merkledag.FetchGraph(ctx, c, n.dserv)
+		if err != nil {
+			return nil, []error{err}
+		}
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	nodechan := n.dserv.GetMany(ctx, cids)
+
+	sizes := make([]uint64, len(cids))
+	errs := make([]error, len(cids))
+
+	for count := 0; count < len(cids); {
+		select {
+		case opt, ok := <-nodechan:
+			if !ok {
+				for i := range errs {
+					errs[i] = errors.New("NodeChan empty")
+				}
+				return nil, errs
+			}
+
+			if opt.Err != nil {
+				errs[count] = opt.Err
+				return nil, errs
+			}
+
+			nd := opt.Node
+			c := nd.Cid()
+			for i, lnk_c := range cids {
+				if c.Equals(lnk_c) {
+					count++
+					size, err := nd.Size()
+					if err != nil {
+						errs[i] = err
+						continue
+					}
+					sizes[i] = size
+				}
+			}
+		case <-ctx.Done():
+			return sizes, errs
+		}
+	}
+
+	return sizes, errs
+}
+
 func (n *BitswapNode) DAGService() ipld.DAGService {
 	return n.dserv
 }

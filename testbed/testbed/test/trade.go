@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"os"
 	"time"
 
 	"github.com/testground/sdk-go/run"
@@ -35,7 +35,7 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		return fmt.Errorf("unsupported node type: %s", nodeType)
 	}
 	t, err := nodeInitializer(ctx, runenv, testvars, baseT)
-	transferNode := t.node
+	// transferNode := t.node
 	signalAndWaitForAll := t.signalAndWaitForAll
 
 	// Start still alive process if enabled
@@ -51,18 +51,16 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 	runenv.RecordMessage("Initializing network")
 
+	err = signalAndWaitForAll("setup-network")
+	if err != nil {
+		return err
+	}
+
 	// Set up network (with traffic shaping)
 	if err := utils.SetupNetwork(ctx, runenv, t.nwClient, t.nodetp, t.tpindex, testParams.Latency,
 		testParams.Bandwidth, testParams.JitterPct); err != nil {
 		return fmt.Errorf("Failed to set up network: %v", err)
 	}
-
-	runenv.RecordMessage("Network initialized")
-
-	// Accounts for every file that couldn't be found.
-	var fetchFails int64
-	publishedRootCids := []cid.Cid{}
-	fetchedRootCids := []cid.Cid{}
 
 	runenv.RecordMessage("Network initialized")
 
@@ -72,63 +70,63 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		return err
 	}
 
-	runenv.RecordMessage("Publishing file CIDs...")
+	// runNum runs for base strategy, then another runNum runs for alt strategy
+	totalRuns := testvars.RunCount * 2
+	for runNum := 1; runNum <= totalRuns; runNum++ {
 
-	switch t.tpindex {
-	case 0: // 0'th peer downloads from  + uploads to everyone
+		runID := fmt.Sprintf("%d", runNum)
 
 		// publish a single file for all to download
-		var publishedCid cid.Cid
-		publishedCid, err = t.addPublishFile(ctx, 0, testParams.File, runenv, testvars)
+		publishedCid, publishedFilePath, err := t.addPublishFile(ctx, t.tpindex, testParams.File, runenv, testvars)
 		if err != nil {
 			return err
 		}
-		publishedRootCids = append(publishedRootCids, publishedCid)
+
+		runenv.RecordMessage("Published file CID %s", publishedCid.String())
+
+		// Accounts for every file that couldn't be found.
+		var fetchFails int64
+		fetchedRootCids := make(map[int]cid.Cid)
 
 		// grab cids to download from all peers
-		for i := 1; i < len(testvars.Permutations); i++ {
-			var fetchedCid cid.Cid
-			fetchedCid, err = t.readFile(ctx, i, runenv, testvars)
+		for i := 0; i < len(testvars.Permutations); i++ {
+			if i == t.tpindex { // don't grab our own cid
+				continue
+			}
+
+			fetchedCid, err := t.readFile(ctx, i, runenv, testvars)
 			if err != nil {
 				return fmt.Errorf("Error fetching cid #%d: %s", i, err.Error())
 			}
-			runenv.RecordMessage(fmt.Sprintf("Successfuly fetched cid #%d: %s", i, fetchedCid))
-			fetchedRootCids = append(fetchedRootCids, fetchedCid)
+			runenv.RecordMessage(fmt.Sprintf("(node %d) Successfuly fetched cid #%d: %s", t.tpindex, i, fetchedCid))
+			fetchedRootCids[i] = fetchedCid
 		}
 
-	default: // other peers publish one file for peer 0, and download one from 0
-
-		// publish a single file for 0 to download
-		publishedCid, err := t.addPublishFile(ctx, t.tpindex, testParams.File, runenv, testvars)
+		runenv.RecordMessage("File injest complete...")
+		// Wait for all nodes to be ready to dial
+		err = signalAndWaitForAll("injest-complete-" + runID)
 		if err != nil {
 			return err
 		}
-		publishedRootCids = append(publishedRootCids, publishedCid)
 
-		// grab cid to download from i
-		fetchedCid, err := t.readFile(ctx, 0, runenv, testvars)
-		if err != nil {
-			return err
+		runenv.RecordMessage("Starting %s Fetch...", nodeType)
+
+		// @dgrisham: we only want to run bitswap tests
+		bsnode, ok := t.node.(*utils.BitswapNode)
+		if !ok {
+			return errors.New("Not a Bitswap node, existing")
 		}
-		runenv.RecordMessage(fmt.Sprintf("Successfuly fetched cid #0: %s", fetchedCid))
-		fetchedRootCids = append(fetchedRootCids, fetchedCid)
-	}
 
-	runenv.RecordMessage("File injest complete...")
-	// Wait for all nodes to be ready to dial
-	err = signalAndWaitForAll("injest-complete")
-	if err != nil {
-		return err
-	}
-
-	runenv.RecordMessage("Starting %s Fetch...", nodeType)
-
-	for runNum := 1; runNum < testvars.RunCount+1; runNum++ {
+		// @dgrisham: switch specified user's strategy for half of the runs
+		if runNum > totalRuns/2 {
+			if t.tpindex == testvars.AltStrategy.User {
+				runenv.RecordMessage("User %d is using alternate strategy %s", testvars.AltStrategy.User, testvars.AltStrategy.Strategy)
+				bsnode.Bitswap.SetWeightFunc(testvars.AltStrategy.Strategy)
+			}
+		}
 		// Reset the timeout for each run
 		ctx, cancel := context.WithTimeout(ctx, testvars.RunTimeout)
 		defer cancel()
-
-		runID := fmt.Sprintf("%d", runNum)
 
 		// Wait for all nodes to be ready to start the run
 		err = signalAndWaitForAll("start-run-" + runID)
@@ -138,23 +136,8 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 		runenv.RecordMessage("Starting run %d / %d (%d bytes)", runNum, testvars.RunCount, testParams.File.Size())
 
-		var peersToDial []utils.PeerInfo
-		switch t.tpindex {
-		case 0: // peer 0 connects to everyone
-			for _, peerInfo := range t.peerInfos {
-				if peerInfo.TpIndex != 0 {
-					peersToDial = append(peersToDial, peerInfo)
-				}
-			}
-		default: // everyone connects to peer 0
-			for _, peerInfo := range t.peerInfos {
-				if peerInfo.TpIndex == 0 {
-					peersToDial = append(peersToDial, peerInfo)
-				}
-			}
-		}
-
-		dialed, err := t.dialFn(ctx, *t.host, t.nodetp, peersToDial, testvars.MaxConnectionRate)
+		// dial all peers
+		dialed, err := t.dialFn(ctx, *t.host, t.nodetp, t.peerInfos, testvars.MaxConnectionRate)
 		if err != nil {
 			return err
 		}
@@ -166,26 +149,26 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			return err
 		}
 
-		// @dgrisham: we only want to run bitswap tests
-		bsnode, ok := t.node.(*utils.BitswapNode)
-		if !ok {
-			return errors.New("Not a Bitswap node, existing")
-		}
-
 		// @dgrisham: set up bitswap ledgers
+		exchangesTrade = copyLedgerData(testvars.InitialSends) // (re)set initial ledger values
 		for _, peerInfo := range t.peerInfos {
 
-			numBytesSent := getInitialSendTrade(t.tpindex, peerInfo.TpIndex)
+			numBytesSent := getBytesSentTrade(t.tpindex, peerInfo.TpIndex)
 			if numBytesSent != 0 {
-				runenv.RecordMessage("Setting sent value in ledger to %d bytes for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+				runenv.RecordMessage("Setting sent value in ledger to %d bytes for peer %d (id %s)", numBytesSent, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 				bsnode.Bitswap.SetLedgerSentBytes(peerInfo.Addr.ID, int(numBytesSent))
 			}
 
-			numBytesRcvd := getInitialSendTrade(peerInfo.TpIndex, t.tpindex)
+			numBytesRcvd := getBytesSentTrade(peerInfo.TpIndex, t.tpindex)
 			if numBytesRcvd != 0 {
-				runenv.RecordMessage("Setting received value in ledger to %d bytes for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+				runenv.RecordMessage("Setting received value in ledger to %d bytes for peer %d (id %s)", numBytesRcvd, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 				bsnode.Bitswap.SetLedgerReceivedBytes(peerInfo.Addr.ID, int(numBytesRcvd))
 			}
+		}
+
+		err = signalAndWaitForAll("ledgers-initialized-" + runID)
+		if err != nil {
+			return err
 		}
 
 		// @dgrisham start time series metric gathering functions
@@ -205,12 +188,13 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 							continue
 						}
 						receipt := bsnode.Bitswap.LedgerForPeer(peerInfo.Addr.ID)
-						receiptID := fmt.Sprintf("receiptAtTime/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v", receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged)
+						roundReset := bsnode.Bitswap.RoundReset()
+						receiptID := fmt.Sprintf("receiptAtTime/run:%d/peer:%s/sent:%v/recv:%v/value:%v/exchanged:%v/weight:%v/workRemaining:%v/roundReset:%t", runNum, receipt.Peer, receipt.Sent, receipt.Recv, receipt.Value, receipt.Exchanged, receipt.Weight, receipt.WorkRemaining, roundReset)
 						runenv.R().RecordPoint(receiptID, float64(1))
 
 						// save ledger sends in case there are more runs/files
-						setSendTrade(t.tpindex, peerInfo.TpIndex, receipt.Sent)
-						setSendTrade(peerInfo.TpIndex, t.tpindex, receipt.Sent)
+						setBytesSentTrade(t.tpindex, peerInfo.TpIndex, receipt.Sent)
+						setBytesSentTrade(peerInfo.TpIndex, t.tpindex, receipt.Sent)
 					}
 
 					time.Sleep(1 * time.Millisecond) // 1 ms between each step
@@ -226,43 +210,43 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 		/// --- Start test
 
-		fetchResults := make([]fetchResult, len(fetchedRootCids))
-		var wg sync.WaitGroup
-		for fetchIdx, fetchCid := range fetchedRootCids { // download all cids in parallel
-			wg.Add(1)
+		fetchCids := []cid.Cid{}
+		for _, cid := range fetchedRootCids {
+			fetchCids = append(fetchCids, cid)
+		}
+		ctxFetch, cancel := context.WithTimeout(ctx, testvars.RunTimeout/2)
 
-			go func(idx int, cid cid.Cid, wg *sync.WaitGroup) {
-				defer wg.Done()
+		runenv.RecordMessage("Fetching cids %v", fetchCids)
 
-				start := time.Now()
-				runenv.RecordMessage("Starting to fetch index #%d, %d / %d (%d bytes)", runNum, idx, testvars.RunCount, testParams.File.Size())
-
-				ctxFetch, cancel := context.WithTimeout(ctx, testvars.RunTimeout/2)
-				rcvFile, err := transferNode.Fetch(ctxFetch, cid, t.peerInfos)
-
-				if err != nil { // failure
-					runenv.RecordMessage("Error fetching cid %s: %v", cid.String(), err)
-					fetchFails++
-				} else { // success, save metrics
-					timeToFetch := time.Since(start)
-					fetchResults[idx] = fetchResult{
-						CID:  cid,
-						Time: timeToFetch,
-					}
-					s, _ := rcvFile.Size()
-					runenv.RecordMessage("Fetch of %d complete (%d ns)", s, timeToFetch)
-				}
+		start := time.Now()
+		sizes, errs := bsnode.FetchAll(ctxFetch, fetchCids, t.peerInfos)
+		timeToFetchAll := time.Since(start)
+		for i, err := range errs {
+			if err != nil {
+				fetchFails++
+				runenv.RecordMessage("Error fetching: %s", fetchCids[i].String(), err.Error())
+			}
+			if fetchFails > 0 {
 				cancel()
-			}(fetchIdx, fetchCid, &wg)
+				return errors.New("Error fetching CID(s)")
+			}
+		}
+		cancel()
+
+		runenv.RecordMessage("Time to fetch all files: %d ns", timeToFetchAll)
+
+		fetchResults := make(map[int]fetchResult, len(fetchedRootCids))
+		for i, s := range sizes {
+			runenv.RecordMessage("Fetch of %s (%d bytes) complete", fetchCids[i].String(), s)
 		}
 
-		wg.Wait()
-
 		// Wait for all downloads to complete
-		err = signalAndWaitForAll("transfer-complete")
+		err = signalAndWaitForAll("transfer-complete-" + runID)
 		if err != nil {
 			return err
 		}
+
+		quit <- true
 
 		/// --- Report stats
 		err = t.emitMetricsTrade(runenv, runNum, nodeType, testParams, fetchResults, tcpFetch, fetchFails, testvars.MaxConnectionRate)
@@ -271,10 +255,16 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		}
 		runenv.RecordMessage("Finishing emitting metrics. Starting to clean...")
 
-		for _, fetchCid := range fetchedRootCids {
-			if err := t.cleanupRun(ctx, fetchCid, runenv); err != nil {
-				return err
-			}
+		if err := t.cleanupRun(ctx, append(fetchCids, publishedCid), runenv); err != nil {
+			return err
+		}
+		if err := os.Remove(publishedFilePath); err != nil {
+			return err
+		}
+
+		err = signalAndWaitForAll("run-complete-" + runID)
+		if err != nil {
+			return err
 		}
 	}
 	err = t.close()

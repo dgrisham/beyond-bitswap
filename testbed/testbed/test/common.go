@@ -2,8 +2,9 @@ package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"math"
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -50,9 +51,10 @@ type TestVars struct {
 	NumWaves          int
 	Permutations      []TestPermutation
 	DiskStore         bool
-	StrategyFunc      string
+	Strategy          string
+	AltStrategy       AltStrategy
 	RoundSize         int
-	InitialRatios     []float64
+	InitialSends      [][]uint64
 }
 
 type TestData struct {
@@ -67,6 +69,11 @@ type TestData struct {
 	nodetp              utils.NodeType
 	tpindex             int
 	seedIndex           int64
+}
+
+type AltStrategy struct {
+	User     int
+	Strategy string
 }
 
 func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
@@ -121,7 +128,25 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 	}
 
 	var err error
-	tv.InitialRatios, err = utils.ParseFloatArray(runenv.StringParam("initial_ratios"))
+
+	var initialRatios [][]float64
+	if runenv.BooleanParam("rand_ratios") {
+		initialRatios = generateRandomRatios(runenv, runenv.TestInstanceCount)
+	} else {
+		if runenv.IsParamSet("initial_ratios") {
+			initialRatios, err = parseInitialRatios(runenv, runenv.TestInstanceCount, runenv.StringParam("initial_ratios"))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	var initialScale int
+	if runenv.IsParamSet("initial_scale") {
+		initialScale = runenv.IntParam("initial_scale")
+	}
+
+	tv.InitialSends, err = makeInitialSends(runenv, initialScale, initialRatios)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +164,26 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 		return nil, err
 	}
 
-	// @dgrisham: Bitswap peer-weights config values
-	if runenv.IsParamSet("strategy_func") {
-		tv.StrategyFunc = runenv.StringParam("strategy_func")
+	// @dgrisham: strategy function to use for all nodes in first instance
+	if runenv.IsParamSet("strategy") {
+		tv.Strategy = runenv.StringParam("strategy")
+	}
+	if runenv.IsParamSet("alt_strategy") {
+		altUserAndStrategy := runenv.StringParam("alt_strategy")
+		if altUserAndStrategy != "none" {
+			split := strings.Split(altUserAndStrategy, ":")
+			if len(split) != 2 {
+				return nil, fmt.Errorf("Error parsing alt_strategy param: expected 2 strings after split on ':', got %d", len(split))
+			}
+			user, err := strconv.Atoi(split[0])
+			if err != nil {
+				return nil, fmt.Errorf("Error parsing alt_strategy user: %s", err.Error())
+			}
+			tv.AltStrategy = AltStrategy{
+				User:     user,
+				Strategy: split[1],
+			}
+		}
 	}
 	if runenv.IsParamSet("round_size") {
 		tv.RoundSize = runenv.IntParam("round_size")
@@ -165,6 +207,85 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 	}
 
 	return tv, nil
+}
+
+func generateRandomRatios(runenv *runtime.RunEnv, numUsers int) [][]float64 {
+	initialRatios := make([][]float64, numUsers)
+	for user := 0; user < numUsers; user++ {
+		initialRatios[user] = make([]float64, numUsers)
+		for peer := 0; peer < numUsers; peer++ {
+			if peer > user {
+				// generate random ratio between 0.5 and 1.5, increments of 0.1
+				initialRatios[user][peer] = float64(rand.Intn(11)+5) / 10
+			} else { // set to 1 in the other direction
+				initialRatios[user][peer] = 1
+			}
+		}
+	}
+
+	return initialRatios
+}
+
+func parseInitialRatios(runenv *runtime.RunEnv, numUsers int, ratioString string) ([][]float64, error) {
+	if ratioString == "" {
+		return nil, nil
+	}
+	initialRatios := make([][]float64, numUsers)
+
+	for i := 0; i < numUsers; i++ {
+		initialRatios[i] = make([]float64, numUsers)
+		for j := 0; j < numUsers; j++ {
+			initialRatios[i][j] = 1
+		}
+	}
+
+	peerRatios := strings.Split(ratioString, ",")
+	for _, peerRatio := range peerRatios {
+		if peerRatio == "" {
+			return nil, errors.New("Malformed initial ratio string")
+		}
+		subsplits := strings.SplitN(peerRatio, ":", 3)
+
+		if len(subsplits) != 3 {
+			return nil, fmt.Errorf("Malformed initial ratio at %s", peerRatios)
+		}
+
+		user, err := strconv.Atoi(subsplits[0])
+		if err != nil {
+			return nil, fmt.Errorf("Error converting user '%s' to int: %s", subsplits[0], err.Error())
+		}
+		peer, err := strconv.Atoi(subsplits[1])
+		if err != nil {
+			return nil, fmt.Errorf("Error converting peer '%s' to int: %s", subsplits[1], err.Error())
+		}
+		ratio, err := strconv.ParseFloat(subsplits[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("Error converting ratio '%s' to float: %s", subsplits[2], err.Error())
+		}
+
+		initialRatios[user][peer] = float64(ratio)
+	}
+
+	return initialRatios, nil
+}
+
+func makeInitialSends(runenv *runtime.RunEnv, scale int, peerRatios [][]float64) ([][]uint64, error) {
+	initialSends := make([][]uint64, len(peerRatios))
+
+	for user, iRatios := range peerRatios {
+		initialSends[user] = make([]uint64, len(iRatios))
+		for peer, ratio := range iRatios {
+			if user == peer {
+				continue
+			}
+			runenv.RecordMessage("Initial ratio for %d -> %d of %.2f", user, peer, ratio)
+			dataSent := uint64(ratio * float64(scale))
+			runenv.RecordMessage("Setting %d -> %d initial send to %d", user, peer, dataSent)
+			initialSends[user][peer] = dataSent
+		}
+	}
+
+	return initialSends, nil
 }
 
 func InitializeTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestVars) (*TestData, error) {
@@ -365,29 +486,20 @@ func (t *NodeTestData) stillAlive(runenv *runtime.RunEnv, v *TestVars) {
 	}
 }
 
-func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int, f utils.TestFile, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, error) {
-	rate := float64(testvars.SeederRate) / 100
-	seeders := runenv.TestInstanceCount - (testvars.LeechCount + testvars.PassiveCount)
-	toSeed := int(math.Ceil(float64(seeders) * rate))
-
-	// If this is the first run for this file size.
-	// Only a rate of seeders add the file.
-	if t.tpindex <= toSeed {
-		// Generating and adding file to IPFS
-		c, err := generateAndAdd(ctx, runenv, t.node, f)
-		if err != nil {
-			return cid.Undef, err
-		}
-		err = fractionalDAG(ctx, runenv, int(t.seedIndex), *c, t.node.DAGService())
-		if err != nil {
-			return cid.Undef, err
-		}
-		return *c, t.publishFile(ctx, fIndex, c, runenv)
+func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int, f utils.TestFile, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, string, error) {
+	// Generating and adding file to IPFS
+	c, path, err := generateAndAdd(ctx, runenv, t.node, f)
+	if err != nil {
+		return cid.Undef, "", err
 	}
-	return cid.Undef, nil
+	err = fractionalDAG(ctx, runenv, int(t.seedIndex), *c, t.node.DAGService())
+	if err != nil {
+		return cid.Undef, "", err
+	}
+	return *c, path, t.publishFile(ctx, fIndex, c, runenv)
 }
 
-func (t *NodeTestData) cleanupRun(ctx context.Context, rootCid cid.Cid, runenv *runtime.RunEnv) error {
+func (t *NodeTestData) cleanupRun(ctx context.Context, rootCids []cid.Cid, runenv *runtime.RunEnv) error {
 	// Disconnect peers
 	for _, c := range t.node.Host().Network().Conns() {
 		err := c.Close()
@@ -397,10 +509,9 @@ func (t *NodeTestData) cleanupRun(ctx context.Context, rootCid cid.Cid, runenv *
 	}
 	runenv.RecordMessage("Closed Connections")
 
-	if t.nodetp == utils.Leech || t.nodetp == utils.Passive {
-		// Clearing datastore
-		// Also clean passive nodes so they don't store blocks from
-		// previous runs.
+	// Clearing datastore (@dgrisham: from all nodes)
+	for _, rootCid := range rootCids {
+		runenv.RecordMessage(fmt.Sprintf("Clearing datastore for peer %d of cid %s", t.tpindex, rootCid))
 		if err := t.node.ClearDatastore(ctx, rootCid); err != nil {
 			return fmt.Errorf("Error clearing datastore: %w", err)
 		}
@@ -447,27 +558,27 @@ type fetchResult struct {
 
 // @dgrisham
 func (t *NodeTestData) emitMetricsTrade(runenv *runtime.RunEnv, runNum int, transport string,
-	permutation TestPermutation, fetchResults []fetchResult, tcpFetch int64, fetchFails int64,
+	permutation TestPermutation, fetchResults map[int]fetchResult, tcpFetch int64, fetchFails int64,
 	maxConnectionRate int) error {
 	// emit download time for each fetched Cid
-	for fetchIdx, fetchResult := range fetchResults {
-		recorder := newMetricsRecorderTrade(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.File.Size()), t.nodetp, t.tpindex, maxConnectionRate, fetchResult.CID.String())
+	for fIndex, fetchResult := range fetchResults {
+		recorder := newMetricsRecorderTrade(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.File.Size()), t.nodetp, t.tpindex, maxConnectionRate, fIndex, fetchResult.CID.String())
 		recorder.Record("fetch_time", float64(fetchResult.Time))
 		if err := t.node.EmitMetrics(recorder); err != nil {
-			return fmt.Errorf("Error emitting metrics for fetch idx %d: %s", fetchIdx, err.Error())
+			return fmt.Errorf("Error emitting metrics for file idx %d: %s", fIndex, err.Error())
 		}
 	}
 
 	return nil
 }
 
-func generateAndAdd(ctx context.Context, runenv *runtime.RunEnv, node utils.Node, f utils.TestFile) (*cid.Cid, error) {
+func generateAndAdd(ctx context.Context, runenv *runtime.RunEnv, node utils.Node, f utils.TestFile) (*cid.Cid, string, error) {
 	// Generate the file
 	inputData := runenv.StringParam("input_data")
 	runenv.RecordMessage("Starting to generate file for inputData: %s and file %v", inputData, f)
-	tmpFile, err := f.GenerateFile()
+	tmpFile, path, err := f.GenerateFile()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Add file to the IPFS network
@@ -478,7 +589,7 @@ func generateAndAdd(ctx context.Context, runenv *runtime.RunEnv, node utils.Node
 		runenv.RecordMessage("Error adding file to node: %w", err)
 	}
 	runenv.RecordMessage("Added to node %v in %d (ms)", cid, end)
-	return &cid, err
+	return &cid, path, err
 }
 
 func parseType(ctx context.Context, runenv *runtime.RunEnv, client *sync.DefaultClient, addrInfo *peer.AddrInfo, seq int64) (int64, utils.NodeType, int, error) {
@@ -640,15 +751,15 @@ func (mr *metricsRecorder) Record(key string, value float64) {
 // @dgrisham
 func newMetricsRecorderTrade(runenv *runtime.RunEnv, runNum int, seq int64, grpseq int64,
 	transport string, latency time.Duration, bandwidthMB int, fileSize int, nodetp utils.NodeType, tpindex int,
-	maxConnectionRate int, fetchCid string) utils.MetricsRecorder {
+	maxConnectionRate int, fIndex int, fetchCid string) utils.MetricsRecorder {
 	latencyMS := latency.Milliseconds()
 	instance := runenv.TestInstanceCount
 	leechCount := runenv.IntParam("leech_count")
 	passiveCount := runenv.IntParam("passive_count")
 
-	id := fmt.Sprintf("topology:(%d-%d-%d)/transport:%s/maxConnectionRate:%d/latencyMS:%d/bandwidthMB:%d/run:%d/seq:%d/groupName:%s/groupSeq:%d/fileSize:%d/nodeType:%s/nodeTypeIndex:%d/fetchCid:%s",
+	id := fmt.Sprintf("topology:(%d-%d-%d)/transport:%s/maxConnectionRate:%d/latencyMS:%d/bandwidthMB:%d/run:%d/seq:%d/groupName:%s/groupSeq:%d/fileSize:%d/nodeType:%s/nodeTypeIndex:%d/fIndex:%d/fetchCid:%s",
 		instance-leechCount-passiveCount, leechCount, passiveCount, transport, maxConnectionRate,
-		latencyMS, bandwidthMB, runNum, seq, runenv.TestGroupID, grpseq, fileSize, nodetp, tpindex, fetchCid)
+		latencyMS, bandwidthMB, runNum, seq, runenv.TestGroupID, grpseq, fileSize, nodetp, tpindex, fIndex, fetchCid)
 
 	return &metricsRecorder{runenv, id}
 }

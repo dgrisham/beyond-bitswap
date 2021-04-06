@@ -1,11 +1,11 @@
 #!/bin/bash
 
-RUNNER="local:docker"
-BUILDER="docker:go"
+# RUNNER="local:docker"
+# BUILDER="docker:go"
 # RUNNER="cluster:k8s"
 # BUILDER="docker:go"
-# RUNNER="local:exec"
-# BUILDER="exec:go"
+RUNNER="local:exec"
+BUILDER="exec:go"
 
 echo "Cleaning previous results..."
 
@@ -13,7 +13,7 @@ echo "Cleaning previous results..."
 # mkdir ./results
 
 # FILE_SIZE=0
-FILE_SIZE=15728640,15728640,15728640
+FILE_SIZE=5000000,5000000,5000000
 RUN_COUNT=1
 INSTANCES=3
 LEECH_COUNT=0

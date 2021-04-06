@@ -46,7 +46,7 @@ instances = { min = 2, max = 64, default = 2 }
   input_data = { type="string", desc="input data to be used in the test (files, random, custom)", default="random"}
   data_dir = { type="string", desc="directory with data is located", default="../extra/testDatasets"}
   exchange_interface = { type="string", desc="exchange interface to use in IPFS node", default="bitswap"}
-  strategy_func = { type = "string", desc = "prq peer weighting function", default = "identity" }
+  strategies = { type = "string", desc = "prq peer weighting function", default = "identity" }
   round_size = { type = "int", desc = "prq round size", unit = "bytes", default = 1000000 }
   run_count = { type = "int", desc = "number of iterations of the test", unit = "iteration", default = 1 }
   initial_ratios = { type = "float", desc = "initial_ratios" }
@@ -94,6 +94,10 @@ instances = { min = 2, max = 64, default = 2 }
   input_data = { type="string", desc="input data to be used in the test (files, random, custom)", default="random"}
   data_dir = { type="string", desc="directory with data is located", default="../extra/test-datasets"}
   exchange_interface = { type="string", desc="exchange interface to use in IPFS node", default="bitswap"}
+  initial_scale = { type="int", desc="", default=100000}
+  initial_ratios = { type="string", desc="e.g. 0:1:0.4", default=""}
+  strategies = { type = "string", desc = "prq peer weighting function", default = "identity" }
+  round_size = { type = "int", desc = "prq round size", unit = "bytes", default = 1000000 }
   run_count = { type = "int", desc = "number of iterations of the test", unit = "iteration", default = 1 }
   run_timeout_secs = { type = "int", desc = "timeout for an individual run", unit = "seconds", default = 90000 }
   leech_count = { type = "int", desc = "number of leech nodes", unit = "peers", default = 1 }

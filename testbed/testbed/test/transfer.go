@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -15,7 +14,6 @@ import (
 	"github.com/testground/sdk-go/sync"
 
 	"github.com/ipfs/go-cid"
-	files "github.com/ipfs/go-ipfs-files"
 	"github.com/protocol/beyond-bitswap/testbed/testbed/utils"
 )
 
@@ -27,8 +25,6 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		return err
 	}
 	nodeType := runenv.StringParam("node_type")
-
-	exchanges = makeInitialSends(runenv, testvars.InitialRatios)
 
 	/// --- Set up
 	ctx, cancel := context.WithTimeout(context.Background(), testvars.Timeout)
@@ -70,7 +66,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 		switch t.nodetp {
 		case utils.Seed:
-			rootCid, err = t.addPublishFile(ctx, pIndex, testParams.File, runenv, testvars)
+			rootCid, _, err = t.addPublishFile(ctx, pIndex, testParams.File, runenv, testvars)
 		case utils.Leech:
 			rootCid, err = t.readFile(ctx, pIndex, runenv, testvars)
 		}
@@ -152,19 +148,25 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 
 			// @dgrisham: set up bitswap ledgers
+			exchangesTrade = copyLedgerData(testvars.InitialSends) // (re)set initial ledger values
 			for _, peerInfo := range t.peerInfos {
 
-				numBytesSent := getBytesSent(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex)
+				numBytesSent := getBytesSentTrade(t.tpindex, peerInfo.TpIndex)
 				if numBytesSent != 0 {
-					runenv.RecordMessage("Setting sent value in ledger to %d bytes for %s %d (peer %s)", numBytesSent, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					runenv.RecordMessage("Setting sent value in ledger to %d bytes for peer %d (id %s)", numBytesSent, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.SetLedgerSentBytes(peerInfo.Addr.ID, int(numBytesSent))
 				}
 
-				numBytesRcvd := getBytesSent(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex)
+				numBytesRcvd := getBytesSentTrade(peerInfo.TpIndex, t.tpindex)
 				if numBytesRcvd != 0 {
-					runenv.RecordMessage("Setting received value in ledger to %d bytes for %s %d (peer %s)", numBytesRcvd, peerInfo.Nodetp, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					runenv.RecordMessage("Setting received value in ledger to %d bytes for peer %d (id %s)", numBytesRcvd, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.SetLedgerReceivedBytes(peerInfo.Addr.ID, int(numBytesRcvd))
 				}
+			}
+
+			err = signalAndWaitForAll("ledgers-initialized-" + runID)
+			if err != nil {
+				return err
 			}
 
 			// @dgrisham start time series metric gathering functions
@@ -189,8 +191,8 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 							runenv.R().RecordPoint(receiptID, float64(1))
 
 							// save ledger sends in case there are more runs/files
-							setBytesSent(t.nodetp, t.tpindex, peerInfo.Nodetp, peerInfo.TpIndex, receipt.Sent)
-							setBytesSent(peerInfo.Nodetp, peerInfo.TpIndex, t.nodetp, t.tpindex, receipt.Sent)
+							setBytesSentTrade(t.tpindex, peerInfo.TpIndex, receipt.Sent)
+							setBytesSentTrade(peerInfo.TpIndex, t.tpindex, receipt.Sent)
 						}
 
 						time.Sleep(1000 * time.Microsecond) // 1 ms between each step
@@ -203,6 +205,8 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			if err != nil {
 				return err
 			}
+
+			quit <- true
 
 			/// --- Start test
 
@@ -231,11 +235,11 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 							leechFails++
 						} else {
 							runenv.RecordMessage("Fetch complete, proceeding")
-							err = files.WriteTo(rcvFile, "/tmp/"+strconv.Itoa(t.tpindex)+time.Now().String())
-							if err != nil {
-								cancel()
-								return err
-							}
+							// err = files.WriteTo(rcvFile, "/tmp/"+strconv.Itoa(t.tpindex)+time.Now().String())
+							// if err != nil {
+							// 	cancel()
+							// 	return err
+							// }
 							timeToFetch = time.Since(start)
 							s, _ := rcvFile.Size()
 							runenv.RecordMessage("Leech fetch of %d complete (%d ns) for wave %d", s, timeToFetch, waveNum)
@@ -263,7 +267,7 @@ func Transfer(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 			runenv.RecordMessage("Finishing emitting metrics. Starting to clean...")
 
-			err = t.cleanupRun(ctx, rootCid, runenv)
+			err = t.cleanupRun(ctx, []cid.Cid{rootCid}, runenv)
 			if err != nil {
 				return err
 			}
@@ -338,11 +342,12 @@ func initializeBitswapTest(ctx context.Context, runenv *runtime.RunEnv, testvars
 	if err != nil {
 		return nil, err
 	}
-	// Create a new bitswap node from the blockstore
-	bsnode, err := utils.CreateBitswapNode(ctx, h, bstore, testvars.StrategyFunc, testvars.RoundSize)
+
+	bsnode, err := utils.CreateBitswapNode(ctx, h, bstore, testvars.Strategy, testvars.RoundSize)
 	if err != nil {
 		return nil, err
 	}
+	runenv.RecordMessage("I am node %d with strategy function '%s'", baseT.tpindex, testvars.Strategy)
 
 	return &NodeTestData{baseT, bsnode, &h}, nil
 }

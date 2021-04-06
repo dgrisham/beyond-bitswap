@@ -21,12 +21,13 @@ var log = logging.Logger("utils")
 
 // TestFile interface for input files used.
 type TestFile interface {
-	GenerateFile() (files.Node, error)
+	GenerateFile() (files.Node, string, error)
 	Size() int64
 }
 
 // RandFile represents a randomly generated file
 type RandFile struct {
+	Path string
 	size int64
 	seed int64
 }
@@ -39,23 +40,24 @@ type PathFile struct {
 }
 
 // GenerateFile generates new randomly generated file
-func (f *RandFile) GenerateFile() (files.Node, error) {
+func (f *RandFile) GenerateFile() (files.Node, string, error) {
 	r := SeededRandReader(int(f.size), f.seed)
 
 	path := fmt.Sprintf("/tmp/%d", rand.Uint64())
 	tf, err := os.Create(path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	if _, err := io.Copy(tf, r); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := tf.Close(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return getUnixfsNode(path)
+	fNode, err := getUnixfsNode(path)
+	return fNode, path, err
 }
 
 // Size returns size
@@ -69,12 +71,12 @@ func (f *PathFile) Size() int64 {
 }
 
 // GenerateFile gets the file from path
-func (f *PathFile) GenerateFile() (files.Node, error) {
+func (f *PathFile) GenerateFile() (files.Node, string, error) {
 	tmpFile, err := getUnixfsNode(f.Path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return tmpFile, nil
+	return tmpFile, f.Path, nil
 }
 
 // RandFromReader Generates random file from existing reader
