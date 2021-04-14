@@ -7,8 +7,8 @@ import (
 
 func main() {
 	run.InvokeMap(map[string]interface{}{
-		"transfer":     test.Transfer,
-		"tcp-transfer": test.TCPTransfer,
-		"trade":        test.Trade,
+		// "transfer":     test.Transfer,
+		// "tcp-transfer": test.TCPTransfer,
+		"trade": test.Trade,
 	})
 }

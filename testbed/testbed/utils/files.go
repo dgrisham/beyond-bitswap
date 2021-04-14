@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	files "github.com/ipfs/go-ipfs-files"
@@ -58,6 +59,10 @@ func (f *RandFile) GenerateFile() (files.Node, string, error) {
 
 	fNode, err := getUnixfsNode(path)
 	return fNode, path, err
+}
+
+func GetUnixFsNode(path string) (files.Node, error) {
+	return getUnixfsNode(path)
 }
 
 // Size returns size
@@ -117,7 +122,7 @@ func RandReader(len int) io.Reader {
 	return SeededRandReader(len, time.Now().Unix())
 }
 
-func GetFileList(runenv *runtime.RunEnv) ([]TestFile, error) {
+func GetFileList(runenv *runtime.RunEnv) ([][]TestFile, error) {
 	listFiles := []TestFile{}
 	inputData := runenv.StringParam("input_data")
 
@@ -151,17 +156,25 @@ func GetFileList(runenv *runtime.RunEnv) ([]TestFile, error) {
 					isDir: file.IsDir(),
 				})
 		}
-		return listFiles, nil
+		return [][]TestFile{listFiles}, nil
 	case "random":
-		fileSizes, err := ParseIntArray(runenv.StringParam("file_size"))
-		runenv.RecordMessage("Getting file list for random with sizes: %v", fileSizes)
-		if err != nil {
-			return nil, err
+		runenv.RecordMessage("FILE_SIZE: %s", runenv.StringParam("file_size"))
+		inputs := strings.Split(runenv.StringParam("file_size"), ":")
+		runenv.RecordMessage("inputs: %v", inputs)
+		runenv.RecordMessage("len(inputs): %v", len(inputs))
+		randomFiles := make([][]TestFile, len(inputs))
+		for i, userFileSizes := range inputs {
+			fileSizes, err := ParseIntArray(userFileSizes)
+			runenv.RecordMessage("Getting file list for random with sizes: %v", fileSizes)
+			if err != nil {
+				return nil, err
+			}
+			randomFiles[i] = make([]TestFile, len(fileSizes))
+			for j, v := range fileSizes {
+				randomFiles[i][j] = &RandFile{size: int64(v), seed: int64(10*i + j)}
+			}
 		}
-		for i, v := range fileSizes {
-			listFiles = append(listFiles, &RandFile{size: int64(v), seed: int64(i)})
-		}
-		return listFiles, nil
+		return randomFiles, nil
 	case "custom":
 		return nil, fmt.Errorf("Custom inputData not implemented yet")
 	default:

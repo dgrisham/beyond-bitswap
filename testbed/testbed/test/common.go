@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ipfs/go-cid"
+	files "github.com/ipfs/go-ipfs-files"
 	ipld "github.com/ipfs/go-ipld-format"
 
 	"github.com/testground/sdk-go/runtime"
@@ -26,7 +27,7 @@ import (
 )
 
 type TestPermutation struct {
-	File      utils.TestFile
+	Files     []utils.TestFile
 	Bandwidth int
 	Latency   time.Duration
 	JitterPct int
@@ -72,8 +73,8 @@ type TestData struct {
 }
 
 type AltStrategy struct {
-	User     int
-	Strategy string
+	User       int
+	Strategies []string
 }
 
 func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
@@ -179,9 +180,11 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Error parsing alt_strategy user: %s", err.Error())
 			}
+
+			strategies := strings.Split(split[1], ",")
 			tv.AltStrategy = AltStrategy{
-				User:     user,
-				Strategy: split[1],
+				User:       user,
+				Strategies: strategies,
 			}
 		}
 	}
@@ -195,12 +198,12 @@ func getEnvVars(runenv *runtime.RunEnv) (*TestVars, error) {
 	}
 	runenv.RecordMessage("Got file list: %v", testFiles)
 
-	for _, f := range testFiles {
+	for _, fs := range testFiles {
 		for _, b := range bandwidths {
 			for _, l := range latencies {
 				latency := time.Duration(l) * time.Millisecond
 				for _, j := range jitters {
-					tv.Permutations = append(tv.Permutations, TestPermutation{File: f, Bandwidth: int(b), Latency: latency, JitterPct: int(j)})
+					tv.Permutations = append(tv.Permutations, TestPermutation{Files: fs, Bandwidth: int(b), Latency: latency, JitterPct: int(j)})
 				}
 			}
 		}
@@ -263,6 +266,7 @@ func parseInitialRatios(runenv *runtime.RunEnv, numUsers int, ratioString string
 			return nil, fmt.Errorf("Error converting ratio '%s' to float: %s", subsplits[2], err.Error())
 		}
 
+		runenv.RecordMessage("INITIAL RATIO for user %d, peer %d: %.2f", user, peer, float64(ratio))
 		initialRatios[user][peer] = float64(ratio)
 	}
 
@@ -499,6 +503,19 @@ func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int, f utils.T
 	return *c, path, t.publishFile(ctx, fIndex, c, runenv)
 }
 
+func (t *NodeTestData) addFile(ctx context.Context, fIndex int, fileNode files.Node, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, error) {
+	// Generating and adding file to IPFS
+	c, err := addFile(ctx, runenv, t.node, fileNode)
+	if err != nil {
+		return cid.Undef, err
+	}
+	err = fractionalDAG(ctx, runenv, int(t.seedIndex), *c, t.node.DAGService())
+	if err != nil {
+		return cid.Undef, err
+	}
+	return *c, t.publishFile(ctx, fIndex, c, runenv)
+}
+
 func (t *NodeTestData) cleanupRun(ctx context.Context, rootCids []cid.Cid, runenv *runtime.RunEnv) error {
 	// Disconnect peers
 	for _, c := range t.node.Host().Network().Conns() {
@@ -516,6 +533,7 @@ func (t *NodeTestData) cleanupRun(ctx context.Context, rootCids []cid.Cid, runen
 			return fmt.Errorf("Error clearing datastore: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -541,7 +559,7 @@ func (t *NodeTestData) close() error {
 func (t *NodeTestData) emitMetrics(runenv *runtime.RunEnv, runNum int, transport string,
 	permutation TestPermutation, timeToFetch time.Duration, tcpFetch int64, leechFails int64,
 	maxConnectionRate int) error {
-	recorder := newMetricsRecorder(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.File.Size()), t.nodetp, t.tpindex, maxConnectionRate)
+	recorder := newMetricsRecorder(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.Files[t.tpindex].Size()), t.nodetp, t.tpindex, maxConnectionRate)
 	if t.nodetp == utils.Leech {
 		recorder.Record("time_to_fetch", float64(timeToFetch))
 		recorder.Record("leech_fails", float64(leechFails))
@@ -562,7 +580,7 @@ func (t *NodeTestData) emitMetricsTrade(runenv *runtime.RunEnv, runNum int, tran
 	maxConnectionRate int) error {
 	// emit download time for each fetched Cid
 	for fIndex, fetchResult := range fetchResults {
-		recorder := newMetricsRecorderTrade(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.File.Size()), t.nodetp, t.tpindex, maxConnectionRate, fIndex, fetchResult.CID.String())
+		recorder := newMetricsRecorderTrade(runenv, runNum, t.seq, t.grpseq, transport, permutation.Latency, permutation.Bandwidth, int(permutation.Files[t.tpindex].Size()), t.nodetp, t.tpindex, maxConnectionRate, fIndex, fetchResult.CID.String())
 		recorder.Record("fetch_time", float64(fetchResult.Time))
 		if err := t.node.EmitMetrics(recorder); err != nil {
 			return fmt.Errorf("Error emitting metrics for file idx %d: %s", fIndex, err.Error())
@@ -590,6 +608,25 @@ func generateAndAdd(ctx context.Context, runenv *runtime.RunEnv, node utils.Node
 	}
 	runenv.RecordMessage("Added to node %v in %d (ms)", cid, end)
 	return &cid, path, err
+}
+
+func generateFile(runenv *runtime.RunEnv, f utils.TestFile) (files.Node, string, error) {
+	// Generate the file
+	inputData := runenv.StringParam("input_data")
+	runenv.RecordMessage("Starting to generate file for inputData: %s and file %v", inputData, f)
+	return f.GenerateFile()
+}
+
+func addFile(ctx context.Context, runenv *runtime.RunEnv, node utils.Node, tmpFile files.Node) (*cid.Cid, error) {
+	// Add file to the IPFS network
+	start := time.Now()
+	cid, err := node.Add(ctx, tmpFile)
+	end := time.Since(start).Milliseconds()
+	if err != nil {
+		runenv.RecordMessage("Error adding file to node: %w", err)
+	}
+	runenv.RecordMessage("Added to node %v in %d (ms)", cid, end)
+	return &cid, err
 }
 
 func parseType(ctx context.Context, runenv *runtime.RunEnv, client *sync.DefaultClient, addrInfo *peer.AddrInfo, seq int64) (int64, utils.NodeType, int, error) {

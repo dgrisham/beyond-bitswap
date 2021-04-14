@@ -223,6 +223,9 @@ func (n *BitswapNode) FetchAll(ctx context.Context, cids []cid.Cid, _ []PeerInfo
 			}
 		case <-ctx.Done():
 			return sizes, errs
+			// case <-cancelChan:
+			// 	cancel()
+			// 	return sizes, []error{errors.New("Received cancel before finishing")}
 		}
 	}
 

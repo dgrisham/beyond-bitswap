@@ -58,5 +58,5 @@ require (
 replace github.com/ipfs/go-bitswap => /home/grish/src/ipfs/go-bitswap
 replace github.com/ipfs/go-peertaskqueue => /home/grish/src/ipfs/go-peertaskqueue
 
-// replace github.com/ipfs/go-bitswap => github.com/dgrisham/go-bitswap 469558f
-// replace github.com/ipfs/go-peertaskqueue => github.com/dgrisham/go-peertaskqueue peer-weights
+// replace github.com/ipfs/go-bitswap => github.com/dgrisham/go-bitswap ff31f10
+// replace github.com/ipfs/go-peertaskqueue => github.com/dgrisham/go-peertaskqueue 10aedff

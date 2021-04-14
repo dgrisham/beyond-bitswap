@@ -33,7 +33,8 @@ run_bitswap(){
         -tp rand_ratios=${18} \
         -tp initial_ratios=${19} \
         -tp initial_scale=${20} \
-        -tp timeout_secs=100000000 \
+        -tp run_timeout_secs=12000 \
+        -tp timeout_secs=100000 \
         -tp long_lasting=true
 }
 

@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	gopath "path"
 	"strings"
+
+	gopath "path"
 
 	"github.com/ipfs/go-cid"
 	chunker "github.com/ipfs/go-ipfs-chunker"
@@ -181,7 +182,6 @@ func (adder *DAGAdder) addNode(node ipld.Node, path string) error {
 
 // Add adds the given files.Node to the DAG
 func (adder *DAGAdder) Add(file files.Node) (ipld.Node, error) {
-
 	if err := adder.addFileNode("", file, true); err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (adder *DAGAdder) Add(file files.Node) (ipld.Node, error) {
 }
 
 func (adder *DAGAdder) addFileNode(path string, file files.Node, toplevel bool) error {
-	defer file.Close()
+	// defer file.Close()
 
 	if adder.liveNodes >= liveCacheSize {
 		// TODO: A smarter cache that uses some sort of lru cache with an eviction handler
