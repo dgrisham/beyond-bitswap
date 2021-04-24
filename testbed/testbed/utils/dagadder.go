@@ -243,7 +243,7 @@ func (adder *DAGAdder) Add(file files.Node) (ipld.Node, error) {
 }
 
 func (adder *DAGAdder) addFileNode(path string, file files.Node, toplevel bool) error {
-	// defer file.Close()
+	defer file.Close()
 
 	if adder.liveNodes >= liveCacheSize {
 		// TODO: A smarter cache that uses some sort of lru cache with an eviction handler

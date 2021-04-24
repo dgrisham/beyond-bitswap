@@ -38,46 +38,44 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 	runenv.RecordMessage("Network initialized")
 
+	t, err := nodeInitializer(ctx, runenv, testvars, baseT)
+	// transferNode := t.node
+	signalAndWaitForAll := t.signalAndWaitForAll
+
+	// Start still alive process if enabled
+	t.stillAlive(runenv, testvars)
+
+	var tcpFetch int64
+
+	// the only thing we'll vary in the permutations is the file, which we want to be unique to each node.
+	// all of the peers will be Active peers, so the `tpindex` will be unique for our runs. so we simply
+	// index the permutations on the type index to get the unique file for this node + the (constant)
+	// bandwidth + latency + jitter options used for all of the permutations
+	testParams := testvars.Permutations[t.tpindex]
+
+	runenv.RecordMessage("Initializing network")
+
+	err = signalAndWaitForAll("setup-network")
+	if err != nil {
+		return err
+	}
+
+	// Set up network (with traffic shaping)
+	if err := utils.SetupNetwork(ctx, runenv, t.nwClient, t.nodetp, t.tpindex, testParams.Latency,
+		testParams.Bandwidth, testParams.JitterPct); err != nil {
+		return fmt.Errorf("Failed to set up network: %v", err)
+	}
+
 	type fileInfo struct {
 		node      *files.Node
 		path      string
 		peerIndex int
 		cid       cid.Cid
 	}
-	generatedFiles := make(map[int]*fileInfo) // fIndex -> fileInfo
 	for _, altStrategy := range testvars.AltStrategy.Strategies {
 		// runNum runs for base strategy, then another runNum runs for alt strategy
 		for runNum := 1; runNum <= testvars.RunCount; runNum++ {
-
 			runID := fmt.Sprintf("%s-%d", altStrategy, runNum)
-
-			t, err := nodeInitializer(ctx, runenv, testvars, baseT)
-			// transferNode := t.node
-			signalAndWaitForAll := t.signalAndWaitForAll
-
-			// Start still alive process if enabled
-			t.stillAlive(runenv, testvars)
-
-			var tcpFetch int64
-
-			// the only thing we'll vary in the permutations is the file, which we want to be unique to each node.
-			// all of the peers will be Active peers, so the `tpindex` will be unique for our runs. so we simply
-			// index the permutations on the type index to get the unique file for this node + the (constant)
-			// bandwidth + latency + jitter options used for all of the permutations
-			testParams := testvars.Permutations[t.tpindex]
-
-			runenv.RecordMessage("Initializing network")
-
-			err = signalAndWaitForAll("setup-network-" + runID)
-			if err != nil {
-				return err
-			}
-
-			// Set up network (with traffic shaping)
-			if err := utils.SetupNetwork(ctx, runenv, t.nwClient, t.nodetp, t.tpindex, testParams.Latency,
-				testParams.Bandwidth, testParams.JitterPct); err != nil {
-				return fmt.Errorf("Failed to set up network: %v", err)
-			}
 
 			// Wait for all nodes to be ready to start the run
 			err = signalAndWaitForAll("start-run-" + runID)
@@ -85,7 +83,7 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
-			runenv.RecordMessage("Starting run %d / %d", runNum, testvars.RunCount)
+			runenv.RecordMessage("(node %d, run %d): Starting run %d / %d", t.tpindex, runNum, runNum, testvars.RunCount)
 
 			// non-alt-strategy users publish a small file for the alt strategy user, and a large one for the rest of the users
 
@@ -101,63 +99,42 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				return err
 			}
 
-			runenv.RecordMessage("First run, generating files...")
-
-			peerIndex := 0
-			for _, file := range testParams.Files {
-				if peerIndex == t.tpindex {
-					peerIndex += 1
-				}
-				fIndex := t.tpindex*10 + peerIndex
-
-				// NOTE: old code to re-use existing file. doesn't work for some reason
-				// if fileInfo, ok := generatedFiles[fIndex]; ok {
-
-				// 	fileNode, err := utils.GetUnixFsNode(fileInfo.path)
-				// 	if err != nil {
-				// 		return err
-				// 	}
-				// 	gFile := generatedFiles[fIndex]
-				// 	gFile.node = &fileNode
-				// 	// generatedFiles[fIndex].node = &fileNode
-
-				// 	runenv.RecordMessage("Found existing file for peer %d, fIndex %d, at path %s", peerIndex, fIndex, fileInfo.path)
-				// 	continue
-				// }
-
-				fileNode, filePath, err := generateFile(runenv, file)
-				if err != nil {
-					return err
-				}
-
-				generatedFiles[fIndex] = &fileInfo{
-					node:      &fileNode,
-					path:      filePath,
-					peerIndex: peerIndex,
-				}
-
-				runenv.RecordMessage("Generated file for peer %d, fIndex %d at path", peerIndex, fIndex, filePath)
-
-				peerIndex += 1
-			}
+			runenv.RecordMessage("(node %d, run %d): First run, generating files...", t.tpindex, runNum)
 
 			err = signalAndWaitForAll("start-cid-publish-" + runID)
 			if err != nil {
 				return err
 			}
 
-			// publishedRootCids := make(map[int]cid.Cid, len(testParams.Files))
+			peerIndex := 0
+			publishedPaths := make(map[int64]string, len(testParams.Files)-1)
+			publishedRootCids := make(map[int64]cid.Cid, len(testParams.Files)-1)
 			{
-				for fIndex, file := range generatedFiles {
-					defer (*file.node).Close()
-					cid, err := t.addFile(ctx, fIndex, *file.node, runenv, testvars)
+				for _, file := range testParams.Files {
+
+					if peerIndex == t.tpindex {
+						peerIndex += 1
+					}
+
+					fIndex := int64(runNum*100 + t.tpindex*10 + peerIndex)
+
+					randFile := file.(*utils.RandFile)
+					runFile := &utils.RandFile{
+						Path: randFile.Path,
+					}
+					runFile.SetSize(randFile.Size())
+					runFile.SetSeed(fIndex)
+
+					cid, path, err := t.addPublishFile(ctx, fIndex, runFile, runenv, testvars)
 					if err != nil {
 						return err
 					}
 
-					file.cid = cid
+					publishedPaths[fIndex] = path
+					publishedRootCids[fIndex] = cid
 
-					runenv.RecordMessage("Published file for peer %d, CID %s, fIndex %d", file.peerIndex, cid.String(), fIndex)
+					runenv.RecordMessage("(node %d, run %d): Published file for peer %d, CID %s, fIndex %d, saved at %s", t.tpindex, runNum, peerIndex, cid.String(), fIndex, path)
+					peerIndex += 1
 				}
 			}
 
@@ -168,30 +145,28 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 			// Accounts for every file that couldn't be found.
 			var fetchFails int64
-			fetchedRootCids := make(map[int]cid.Cid)
+			fetchedRootCids := make(map[int64]cid.Cid)
 
 			// grab cids to download from all peers
 			{
-				peerIndex := 0
 				for i := 0; i < len(testvars.Permutations); i++ {
 					if i == t.tpindex { // don't grab our own cid
-						peerIndex += 1
 						continue
 					}
 
-					fIndex := peerIndex*10 + t.tpindex
+					fIndex := int64(runNum*100) + int64(i*10) + int64(t.tpindex)
+
+					runenv.RecordMessage("(node %d, run %d): Fetching cid from peer %d, findex %d", t.tpindex, runNum, i, fIndex)
 					fetchedCid, err := t.readFile(ctx, fIndex, runenv, testvars)
 					if err != nil {
 						return fmt.Errorf("Error fetching cid with fIndex %d: %s", fIndex, err.Error())
 					}
-					runenv.RecordMessage("(node %d) Successfuly fetched cid from peer %d, CID %s, fIndex %d", t.tpindex, peerIndex, fetchedCid, fIndex)
+					runenv.RecordMessage("(node %d, run %d): Successfuly fetched cid from peer %d, CID %s, fIndex %d", t.tpindex, runNum, i, fetchedCid, fIndex)
 					fetchedRootCids[fIndex] = fetchedCid
-
-					peerIndex += 1
 				}
 			}
 
-			runenv.RecordMessage("File injest complete...")
+			runenv.RecordMessage("(node %d, run %d): File injest complete...", t.tpindex, runNum)
 			// Wait for all nodes to be ready to dial
 			err = signalAndWaitForAll("injest-complete-" + runID)
 			if err != nil {
@@ -205,7 +180,7 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 
 			if t.tpindex == testvars.AltStrategy.User {
-				runenv.RecordMessage("User %d is using alternate strategy %s", testvars.AltStrategy.User, altStrategy)
+				runenv.RecordMessage("(node %d, run %d): User %d is using alternate strategy %s", t.tpindex, runNum, testvars.AltStrategy.User, altStrategy)
 				bsnode.Bitswap.SetWeightFunc(altStrategy)
 			}
 
@@ -218,7 +193,7 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			if err != nil {
 				return err
 			}
-			runenv.RecordMessage("Dialed %d other nodes", len(dialed))
+			runenv.RecordMessage("(node %d, run %d): Dialed %d other nodes", t.tpindex, runNum, len(dialed))
 
 			// Wait for all nodes to be connected
 			err = signalAndWaitForAll("connect-complete-" + runID)
@@ -232,13 +207,13 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 				numBytesSent := getBytesSentTrade(t.tpindex, peerInfo.TpIndex)
 				if numBytesSent != 0 {
-					runenv.RecordMessage("Setting sent value in ledger to %d bytes for peer %d (id %s)", numBytesSent, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					runenv.RecordMessage("(node %d, run %d): Setting sent value in ledger to %d bytes for peer %d (id %s)", t.tpindex, runNum, numBytesSent, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.SetLedgerSentBytes(peerInfo.Addr.ID, int(numBytesSent))
 				}
 
 				numBytesRcvd := getBytesSentTrade(peerInfo.TpIndex, t.tpindex)
 				if numBytesRcvd != 0 {
-					runenv.RecordMessage("Setting received value in ledger to %d bytes for peer %d (id %s)", numBytesRcvd, peerInfo.TpIndex, peerInfo.Addr.ID.String())
+					runenv.RecordMessage("(node %d, run %d): Setting received value in ledger to %d bytes for peer %d (id %s)", t.tpindex, runNum, numBytesRcvd, peerInfo.TpIndex, peerInfo.Addr.ID.String())
 					bsnode.Bitswap.SetLedgerReceivedBytes(peerInfo.Addr.ID, int(numBytesRcvd))
 				}
 			}
@@ -294,7 +269,7 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			ctxFetch, fetchCancel := context.WithTimeout(ctx, testvars.RunTimeout/2)
 			defer fetchCancel()
 
-			runenv.RecordMessage("Fetching cids %v", fetchCids)
+			runenv.RecordMessage("(node %d, run %d): Fetching cids %v", t.tpindex, runNum, fetchCids)
 
 			err = signalAndWaitForAll("ready-to-fetch-" + runID)
 			if err != nil {
@@ -302,40 +277,53 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			}
 
 			fetchResults := make(map[int]fetchResult, len(fetchedRootCids))
-			// if t.tpindex == testvars.AltStrategy.User {
+			if t.tpindex == testvars.AltStrategy.User {
 
-			start := time.Now()
-			sizes, errs := bsnode.FetchAll(ctxFetch, fetchCids, t.peerInfos)
-			timeToFetchAll := time.Since(start)
-			for i, err := range errs {
-				if err != nil {
-					fetchFails++
-					runenv.RecordMessage("Error fetching: %s", fetchCids[i].String(), err.Error())
+				start := time.Now()
+				sizes, errs := bsnode.FetchAll(ctxFetch, fetchCids, t.peerInfos)
+				timeToFetchAll := time.Since(start)
+				for i, err := range errs {
+					if err != nil {
+						fetchFails++
+						runenv.RecordMessage("(node %d, run %d): Error fetching: %s", t.tpindex, runNum, fetchCids[i].String(), err.Error())
+					}
+					if fetchFails > 0 {
+						return errors.New("Error fetching CID(s)")
+					} else {
+						runenv.RecordMessage("(node %d, run %d): Fetch of %s (%d bytes) complete", t.tpindex, runNum, fetchCids[i].String(), sizes[i])
+					}
 				}
-				if fetchFails > 0 {
-					return errors.New("Error fetching CID(s)")
-				}
-			}
-			cancel()
 
-			runenv.RecordMessage("Time to fetch all files: %d ns", timeToFetchAll)
+				runenv.RecordMessage("(node %d, run %d): Time to fetch all files: %d ns", t.tpindex, runNum, timeToFetchAll)
 
-			for i, s := range sizes {
-				runenv.RecordMessage("Fetch of %s (%d bytes) complete", fetchCids[i].String(), s)
+			} else {
+				go func() {
+					sizes, errs := bsnode.FetchAll(ctxFetch, fetchCids, t.peerInfos)
+					runenv.RecordMessage("(node %d, run %d): Fetch completed or cancelled", t.tpindex, runNum)
+					for i, err := range errs {
+						if err != nil {
+							fetchFails++
+							runenv.RecordMessage("(node %d, run %d): Error fetching: %s", t.tpindex, runNum, fetchCids[i].String(), err.Error())
+						} else {
+							runenv.RecordMessage("(node %d, run %d): Fetch of %s (%d bytes) complete", t.tpindex, runNum, fetchCids[i].String(), sizes[i])
+						}
+					}
+				}()
 			}
-			// } else {
-			// 	go func() {
-			// 		bsnode.FetchAll(ctxFetch, fetchCids, t.peerInfos)
-			// 		runenv.RecordMessage("Fetch completed or cancelled")
-			// 	}()
-			// }
 
 			// Wait for all downloads to complete (only care that the user of interest finished)
 			err = signalAndWaitForAll("transfer-complete-" + runID)
 			if err != nil {
 				return err
 			}
-			// fetchCancel()
+			if t.tpindex != testvars.AltStrategy.User {
+				fetchCancel()
+			}
+
+			err = signalAndWaitForAll("all-nodes-done-" + runID)
+			if err != nil {
+				return err
+			}
 
 			// quit <- true
 
@@ -345,49 +333,45 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 				if err != nil {
 					return err
 				}
-				runenv.RecordMessage("Finishing emitting metrics. Starting to clean...")
+				runenv.RecordMessage("(node %d, run %d): Finishing emitting metrics. Starting to clean...", t.tpindex, runNum)
 			}
 
 			// publishCids := make([]cid.Cid, len(publishedRootCids))
 			// for _, cid := range publishedRootCids {
 			// 	publishCids = append(publishCids, cid)
 			// }
-			publishedCids := make([]cid.Cid, len(generatedFiles))
-			for _, f := range generatedFiles {
-				publishedCids = append(publishedCids, f.cid)
-			}
-			allCids := append(fetchCids, publishedCids...)
+			// var publishedCids []cid.Cid // := make([]cid.Cid, len(generatedFiles))
+			// for fIndex, f := range generatedFiles {
+			// 	runenv.RecordMessage("(node %d, run %d): PUBLISHED fIndex: %d, cid: %s", t.tpindex, runNum, fIndex, f.cid.String())
+			// 	publishedCids = append(publishedCids, f.cid)
+			// }
+			// runenv.RecordMessage("(node %d, run %d): PUBLISHED cids to clean up: %v", t.tpindex, runNum, publishedCids)
+			// allCids := append(fetchCids, publishedCids...)
 
-			runenv.RecordMessage("cids to clean up: %v", allCids)
+			// runenv.RecordMessage("(node %d, run %d): cids to clean up: %v", t.tpindex, runNum, allCids)
 
-			if err := t.cleanupRun(ctx, allCids, runenv); err != nil { // disconnect from all peers
+			if err := t.cleanupRun(ctx, []cid.Cid{}, runenv); err != nil { // disconnect from all peers
 				return err
 			}
 
-			err = bsnode.DAGService().RemoveMany(ctx, allCids)
-			if err != nil {
-				return err
-			}
+			// err = bsnode.DAGService().RemoveMany(ctx, allCids)
+			// if err != nil {
+			// 	return err
+			// }
 
-			for _, fileInfo := range generatedFiles {
-				runenv.RecordMessage("Removing file %s", fileInfo.path)
-				if err := os.Remove(fileInfo.path); err != nil {
+			for _, path := range publishedPaths {
+				runenv.RecordMessage("(node %d, run %d): Removing file %s", t.tpindex, runNum, path)
+				if err := os.Remove(path); err != nil {
 					return err
 				}
 			}
 
-			err = bsnode.ClearDatastore(ctx, cid.Cid{})
-			if err != nil {
-				return err
-			}
+			// err = bsnode.ClearDatastore(ctx, cid.Cid{})
+			// if err != nil {
+			// 	return err
+			// }
 
 			err = signalAndWaitForAll("run-complete-" + runID)
-			if err != nil {
-				return err
-			}
-
-			runenv.RecordMessage("Closing node")
-			err = t.close()
 			if err != nil {
 				return err
 			}
@@ -396,6 +380,12 @@ func Trade(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			// 	return err
 			// }
 		}
+	}
+
+	runenv.RecordMessage("Closing node")
+	err = t.close()
+	if err != nil {
+		return err
 	}
 
 	runenv.RecordMessage("Ending testcase")

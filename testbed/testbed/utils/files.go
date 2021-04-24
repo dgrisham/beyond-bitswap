@@ -45,6 +45,7 @@ func (f *RandFile) GenerateFile() (files.Node, string, error) {
 	r := SeededRandReader(int(f.size), f.seed)
 
 	path := fmt.Sprintf("/tmp/%d", rand.Uint64())
+	// path := fmt.Sprintf("/home/grish/scratch/testgroundTmp/%d", rand.Uint64())
 	tf, err := os.Create(path)
 	if err != nil {
 		return nil, "", err
@@ -68,6 +69,18 @@ func GetUnixFsNode(path string) (files.Node, error) {
 // Size returns size
 func (f *RandFile) Size() int64 {
 	return f.size
+}
+
+func (f *RandFile) SetSize(size int64) {
+	f.size = size
+}
+
+func (f *RandFile) SetSeed(seed int64) {
+	f.seed = seed
+}
+
+func (f *RandFile) Seed() int64 {
+	return f.seed
 }
 
 // Size returns size

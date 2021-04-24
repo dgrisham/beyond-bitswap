@@ -1,11 +1,11 @@
 #!/bin/zsh
 
-# RUNNER="local:docker"
-# BUILDER="docker:go"
+RUNNER="local:docker"
+BUILDER="docker:go"
 # RUNNER="cluster:k8s"
 # BUILDER="docker:go"
-RUNNER="local:exec"
-BUILDER="exec:go"
+# RUNNER="local:exec"
+# BUILDER="exec:go"
 
 # echo "Cleaning previous results..."
 
@@ -13,16 +13,16 @@ BUILDER="exec:go"
 # mkdir ./results
 
 # FILE_SIZE=157286400
-FILE_SIZE='100000000,200000000:200000000,200000000:200000000,100000000'
+FILE_SIZE='400000000,1000000000:1000000000,1200000000:1200000000,400000000'
 # FILE_SIZE=15728640,31457280,47185920,57671680
-RUN_COUNT=100
+RUN_COUNT=1000
 INSTANCES=3
 LEECH_COUNT=0
 PASSIVE_COUNT=0
-LATENCY=25
+LATENCY=50
 NODE_TYPE=bitswap
-JITTER=10
-BANDWIDTH=512
+JITTER=0
+BANDWIDTH=1024
 PARALLEL_GEN=100
 TESTCASE=trade
 INPUT_DATA=random
@@ -30,12 +30,13 @@ DATA_DIR=../testDatasets
 TCP_ENABLED=false
 MAX_CONNECTION_RATE=100
 
-STRATEGY='constant'
-ALT_STRATEGY='1:identity'
+STRATEGY='identity'
+ALT_STRATEGY='1:constant'
+#ALT_STRATEGY='1:identity,constant,sigmoid,payDebts,freeride'
 RAND_RATIOS=false
 
-ROUND_SIZE=10000000
-INITIAL_SCALE=10000000
+ROUND_SIZE=1000000
+INITIAL_SCALE=50000000
 INITIAL_RATIOS='0:1:0.7,0:2:1.1,1:2:0.8'
 
 source ./exec.sh
@@ -44,7 +45,8 @@ eval $cmd
 
 # clean up
  # docker ps -a -q | xargs docker rm -f
-docker ps -a | grep -v goproxy | tail -n+2 | awk '{print $1}' | xargs docker rm -f
+# TODO: don't kill lacuna containers
+# docker ps -a | grep -v goproxy | tail -n+2 | awk '{print $1}' | xargs docker rm -f
 docker image ls --filter reference=tg-plan-testbed -q | xargs docker rmi -f
 docker volume prune -f
 rm -rf ~/src/ipfs/beyond-bitswap/data

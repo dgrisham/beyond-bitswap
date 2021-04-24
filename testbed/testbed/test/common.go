@@ -378,7 +378,7 @@ func InitializeTest(ctx context.Context, runenv *runtime.RunEnv, testvars *TestV
 	}, nil
 }
 
-func (t *TestData) publishFile(ctx context.Context, fIndex int, cid *cid.Cid, runenv *runtime.RunEnv) error {
+func (t *TestData) publishFile(ctx context.Context, fIndex int64, cid *cid.Cid, runenv *runtime.RunEnv) error {
 	// Create identifier for specific file size.
 	rootCidTopic := getRootCidTopic(fIndex)
 
@@ -390,7 +390,7 @@ func (t *TestData) publishFile(ctx context.Context, fIndex int, cid *cid.Cid, ru
 	return nil
 }
 
-func (t *TestData) readFile(ctx context.Context, fIndex int, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, error) {
+func (t *TestData) readFile(ctx context.Context, fIndex int64, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, error) {
 	// Create identifier for specific file size.
 	rootCidTopic := getRootCidTopic(fIndex)
 	// Get the root CID from a seed
@@ -490,7 +490,7 @@ func (t *NodeTestData) stillAlive(runenv *runtime.RunEnv, v *TestVars) {
 	}
 }
 
-func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int, f utils.TestFile, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, string, error) {
+func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int64, f utils.TestFile, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, string, error) {
 	// Generating and adding file to IPFS
 	c, path, err := generateAndAdd(ctx, runenv, t.node, f)
 	if err != nil {
@@ -503,7 +503,7 @@ func (t *NodeTestData) addPublishFile(ctx context.Context, fIndex int, f utils.T
 	return *c, path, t.publishFile(ctx, fIndex, c, runenv)
 }
 
-func (t *NodeTestData) addFile(ctx context.Context, fIndex int, fileNode files.Node, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, error) {
+func (t *NodeTestData) addFile(ctx context.Context, fIndex int64, fileNode files.Node, runenv *runtime.RunEnv, testvars *TestVars) (cid.Cid, error) {
 	// Generating and adding file to IPFS
 	c, err := addFile(ctx, runenv, t.node, fileNode)
 	if err != nil {
@@ -526,13 +526,17 @@ func (t *NodeTestData) cleanupRun(ctx context.Context, rootCids []cid.Cid, runen
 	}
 	runenv.RecordMessage("Closed Connections")
 
-	// Clearing datastore (@dgrisham: from all nodes)
-	for _, rootCid := range rootCids {
-		runenv.RecordMessage(fmt.Sprintf("Clearing datastore for peer %d of cid %s", t.tpindex, rootCid))
-		if err := t.node.ClearDatastore(ctx, rootCid); err != nil {
-			return fmt.Errorf("Error clearing datastore: %w", err)
-		}
+	if err := t.node.ClearDatastore(ctx, cid.Cid{}); err != nil { // bitswap node impl of this function ignores cid
+		return fmt.Errorf("Error clearing datastore: %w", err)
 	}
+
+	// Clearing datastore (@dgrisham: from all nodes)
+	// for _, rootCid := range rootCids {
+	// 	runenv.RecordMessage(fmt.Sprintf("Clearing datastore for peer %d of cid %s", t.tpindex, rootCid))
+	// if err := t.node.ClearDatastore(ctx, rootCid); err != nil {
+	// 	return fmt.Errorf("Error clearing datastore: %w", err)
+	// }
+	// }
 
 	return nil
 }
@@ -753,7 +757,7 @@ func getLeafNodes(ctx context.Context, node ipld.Node, dserv ipld.DAGService) ([
 	return leaves, nil
 }
 
-func getRootCidTopic(id int) *sync.Topic {
+func getRootCidTopic(id int64) *sync.Topic {
 	return sync.NewTopic(fmt.Sprintf("root-cid-%d", id), &cid.Cid{})
 }
 
